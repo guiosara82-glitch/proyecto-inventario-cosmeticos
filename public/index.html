@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Inventario de Productos Cosméticos</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<section id="pantalla-login" class="pantalla-login">
+  <button id="btn-tema-login" class="btn-tema-login" title="Cambiar tema">🌙</button>
+  <div class="caja-login">
+    <h1>Inventario de Cosméticos</h1>
+    <h2 id="titulo-login">Iniciar sesión</h2>
+
+    <form id="form-login">
+      <input type="email" id="login-correo" placeholder="Correo" required>
+      <div class="campo-clave">
+        <input type="password" id="login-password" placeholder="Contraseña" required>
+        <button type="button" id="btn-ver-clave" title="Mostrar u ocultar contraseña" aria-label="Mostrar contraseña">👁️</button>
+      </div>
+      <button type="submit">Entrar</button>
+    </form>
+    <p class="alterna"><a href="#" id="link-olvido">¿Olvidaste tu contraseña?</a></p>
+    <p id="msg-login" class="mensaje"></p>
+
+    <hr>
+  </div>
+</section>
+
+<div id="app" class="oculto">
+
+<header>
+  <h1>Inventario de Productos Cosméticos</h1>
+  <div class="sesion">
+    <span id="usuario-activo"></span>
+    <button id="btn-tema" title="Cambiar tema">🌙 Oscuro</button>
+    <button id="btn-logout">Cerrar sesión</button>
+  </div>
+</header>
+
+<nav>
+  <button class="tab-btn active" data-tab="productos">Productos</button>
+  <button class="tab-btn" data-tab="compras">Entradas</button>
+  <button class="tab-btn" data-tab="ventas">Salidas</button>
+  <button class="tab-btn" data-tab="clientes">Clientes</button>
+  <button class="tab-btn" data-tab="proveedores">Proveedores</button>
+  <button class="tab-btn" data-tab="alertas">Alertas de Caducidad</button>
+  <button class="tab-btn" data-tab="critico">Stock Crítico</button>
+  <button class="tab-btn" data-tab="vendedores">Vendedores</button>
+  <button class="tab-btn" data-tab="reportes">Reportes</button>
+</nav>
+
+<main>
+
+  <section id="tab-productos" class="tab-content active">
+    <h2>Registrar Producto</h2>
+    <form id="form-producto" class="formulario">
+      <input type="text" id="p-sku" placeholder="SKU (ej. MAQ-001)" pattern="[A-Za-z]{2,8}-[A-Za-z0-9]{1,20}" title="Formato: letras, guion y código. Ejemplo MAQ-001" required>
+      <input type="text" id="p-nombre" placeholder="Nombre" pattern="(?=.*[A-Za-zÁ-ÿ])[A-Za-zÁ-ÿ0-9\s.'-]{2,150}" title="Debe contener letras" required>
+      <input type="text" id="p-marca" placeholder="Marca" pattern="(?=.*[A-Za-zÁ-ÿ])[A-Za-zÁ-ÿ0-9\s.'-]{2,150}" title="Debe contener letras">
+      <input type="number" id="p-precio" placeholder="Precio (mín. 100)" step="0.01" min="100" required>
+      <div class="grupo-select-boton">
+        <select id="p-categoria" required></select>
+        <button type="button" id="btn-modal-nueva-categoria" class="btn-accion-mini" title="Crear nueva categoría">+ Nueva</button>
+      </div>
+      <input type="number" id="p-stockmin" placeholder="Stock mínimo" min="0" value="5">
+      <button type="submit">Guardar</button>
+    </form>
+    <p id="msg-producto" class="mensaje"></p>
+
+    <h2>Catálogo</h2>
+    <input type="text" id="buscar-producto" placeholder="Buscar por nombre, marca o SKU...">
+    <table id="tabla-productos">
+      <thead><tr><th>SKU</th><th>Nombre</th><th>Marca</th><th>Categoría</th><th>Precio</th><th>Stock</th><th>Stock mín.</th><th>Acciones</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="tab-compras" class="tab-content">
+    <h2>Registrar Entrada de Inventario</h2>
+    <form id="form-compra" class="formulario">
+      <div class="grupo-select-boton">
+        <select id="c-proveedor" required></select>
+        <button type="button" id="btn-modal-nuevo-proveedor" class="btn-accion-mini" title="Registrar nuevo proveedor">+ Nuevo</button>
+      </div>
+      <select id="c-producto" required></select>
+      <input type="number" id="c-cantidad" placeholder="Cantidad" min="1" required>
+      <input type="number" id="c-costo" placeholder="Costo unitario" step="0.01" min="0.01" required>
+      <div id="info-costo-compra" class="info-precio oculto"></div>
+      <label for="c-vencimiento" class="etiqueta-campo">Fecha de vencimiento</label>
+      <input type="date" id="c-vencimiento" required>
+      <button type="submit">Registrar Entrada</button>
+    </form>
+    <p id="msg-compra" class="mensaje"></p>
+
+    <h2>Historial de Entradas</h2>
+    <table id="tabla-compras">
+      <thead><tr><th>Producto</th><th>Proveedor</th><th>Cantidad</th><th>Disponible</th><th>Costo</th><th>Vencimiento</th><th>Fecha</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="tab-ventas" class="tab-content">
+    <h2>Registrar Salida / Venta</h2>
+    <form id="form-venta" class="formulario">
+      <select id="v-cliente"></select>
+      <select id="v-producto" required></select>
+      <input type="number" id="v-cantidad" placeholder="Cantidad" min="1" required>
+      <input type="number" id="v-precio" placeholder="Precio unitario" step="0.01" min="0">
+      <select id="v-concepto">
+        <option value="VENTA">Venta</option>
+        <option value="MUESTRA">Muestra</option>
+        <option value="DAÑADO">Dañado</option>
+      </select>
+      <div id="info-precio-venta" class="info-precio oculto"></div>
+      <button type="button" id="btn-agregar-venta" class="secundario">Agregar producto</button>
+      <button type="submit">Registrar Salida</button>
+    </form>
+    <p id="msg-venta" class="mensaje"></p>
+    <h3>Productos de esta venta</h3>
+    <table id="tabla-carrito-venta">
+      <thead><tr><th>Producto</th><th>Cantidad</th><th>Concepto</th><th>Precio</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <h2>Historial de Salidas</h2>
+    <table id="tabla-ventas">
+      <thead><tr><th>Producto</th><th>Cliente</th><th>Cantidad</th><th>Concepto</th><th>Precio</th><th>Usuario</th><th>Fecha</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="tab-clientes" class="tab-content">
+    <h2>Registrar Cliente</h2>
+    <form id="form-cliente" class="formulario" autocomplete="off">
+      <input type="text" id="cli-documento" placeholder="Documento (8 a 10 dígitos)" pattern="[0-9]{8,10}" title="Solo números, 8 a 10 dígitos" minlength="8" maxlength="10" required>
+      <input type="text" id="cli-nombre" placeholder="Nombre completo" pattern="[A-Za-zÁ-ÿ\s]{2,150}" title="Solo letras y espacios" minlength="2" maxlength="150" required>
+      <input type="text" id="cli-contacto" placeholder="Teléfono (máx. 10) o correo">
+      <button type="submit">Guardar Cliente</button>
+    </form>
+    <p id="msg-cliente" class="mensaje"></p>
+
+    <h2>Clientes Registrados</h2>
+    <input type="text" id="buscar-cliente" placeholder="Buscar por documento, nombre o contacto...">
+    <table id="tabla-clientes">
+      <thead><tr><th>Documento</th><th>Nombre</th><th>Contacto</th><th>Fecha Registro</th><th>Acciones</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="tab-proveedores" class="tab-content">
+    <h2>Registrar Proveedor</h2>
+    <form id="form-proveedor-tab" class="formulario">
+      <input type="text" id="prov-nombre" placeholder="Nombre" required>
+      <input type="text" id="prov-contacto" placeholder="Contacto">
+      <input type="text" id="prov-telefono" placeholder="Teléfono">
+      <input type="text" id="prov-direccion" placeholder="Dirección">
+      <button type="submit">Guardar Proveedor</button>
+    </form>
+    <p id="msg-proveedor-tab" class="mensaje"></p>
+    <h2>Proveedores registrados</h2>
+    <table id="tabla-proveedores">
+      <thead><tr><th>Nombre</th><th>Contacto</th><th>Teléfono</th><th>Dirección</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="tab-alertas" class="tab-content">
+    <h2>Alertas de Caducidad (próximos 30 días)</h2>
+    <table id="tabla-alertas">
+      <thead><tr><th>Producto</th><th>SKU</th><th>Disponible</th><th>Vencimiento</th><th>Días restantes</th><th>Estado</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="tab-critico" class="tab-content">
+    <h2>Reporte de Stock Crítico</h2>
+    <table id="tabla-critico">
+      <thead><tr><th>SKU</th><th>Producto</th><th>Stock actual</th><th>Stock mínimo</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="tab-vendedores" class="tab-content">
+    <h2>Registrar Vendedor</h2>
+    <form id="form-registro" class="formulario" autocomplete="off">
+      <input type="text" id="reg-nombre" placeholder="Nombre completo" pattern="[A-Za-zÁ-ÿ\s]{2,150}" title="Solo letras y espacios" autocomplete="off" required>
+      <input type="email" id="reg-correo" placeholder="Correo (ejemplo@dominio.com)" autocomplete="off" required>
+      <input type="text" id="reg-telefono" placeholder="Teléfono (solo números)" pattern="[0-9]{7,15}" title="Entre 7 y 15 números" autocomplete="off" inputmode="numeric" name="telefono-vendedor">
+      <select id="reg-rol" required></select>
+      <input type="password" id="reg-password" placeholder="Contraseña (mínimo 6 caracteres)" minlength="6" autocomplete="new-password" required>
+      <button type="submit">Registrar</button>
+    </form>
+    <p id="aviso-correo" class="aviso oculto">El correo debe incluir un @</p>
+    <p id="msg-registro" class="mensaje"></p>
+
+    <h2>Vendedores registrados</h2>
+    <table id="tabla-vendedores">
+      <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="tab-reportes" class="tab-content">
+    <h2>Reporte de Alertas de Caducidad</h2>
+    <div class="formulario">
+      <button id="btn-generar-caducidad">Generar reporte de caducidad</button>
+      <button id="btn-descargar-caducidad" class="oculto secundario">Descargar PDF</button>
+    </div>
+    <p id="msg-reporte-caducidad" class="mensaje"></p>
+    <table id="tabla-reporte-caducidad" class="oculto">
+      <thead><tr><th>Producto</th><th>SKU</th><th>Disponible</th><th>Vencimiento</th><th>Días restantes</th><th>Estado</th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <h2>Reporte de Entradas y Salidas</h2>
+    <div class="formulario">
+      <label for="rep-desde" class="etiqueta-campo">Desde</label>
+      <input type="date" id="rep-desde" required>
+      <label for="rep-hasta" class="etiqueta-campo">Hasta</label>
+      <input type="date" id="rep-hasta" required>
+      <button id="btn-generar-movimientos">Generar reporte</button>
+      <button id="btn-descargar-movimientos" class="oculto secundario">Exportar PDF</button>
+    </div>
+    <p id="msg-reporte-movimientos" class="mensaje"></p>
+    <table id="tabla-reporte-movimientos" class="oculto">
+      <thead><tr><th>Tipo</th><th>Fecha</th><th>Producto</th><th>Cantidad</th><th>Usuario</th><th>Detalle</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+</main>
+
+</div>
+
+<div id="modal-nueva-categoria" class="modal-overlay oculto">
+  <div class="modal-contenido">
+    <div class="modal-encabezado">
+      <h3>Nueva categoría</h3>
+      <button type="button" class="btn-cerrar" data-cerrar="modal-nueva-categoria">&times;</button>
+    </div>
+    <form id="form-nueva-categoria" class="modal-form">
+      <label class="etiqueta-campo" for="cat-nombre">Nombre</label>
+      <input type="text" id="cat-nombre" required>
+      <p id="msg-nueva-categoria" class="mensaje"></p>
+      <div class="modal-acciones">
+        <button type="button" class="secundario" data-cerrar="modal-nueva-categoria">Cancelar</button>
+        <button type="submit">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="modal-nuevo-proveedor" class="modal-overlay oculto">
+  <div class="modal-contenido">
+    <div class="modal-encabezado">
+      <h3>Nuevo proveedor</h3>
+      <button type="button" class="btn-cerrar" data-cerrar="modal-nuevo-proveedor">&times;</button>
+    </div>
+    <form id="form-nuevo-proveedor" class="modal-form">
+      <label class="etiqueta-campo" for="np-nombre">Nombre</label>
+      <input type="text" id="np-nombre" required>
+      <label class="etiqueta-campo" for="np-contacto">Contacto</label>
+      <input type="text" id="np-contacto">
+      <label class="etiqueta-campo" for="np-telefono">Teléfono</label>
+      <input type="text" id="np-telefono">
+      <label class="etiqueta-campo" for="np-direccion">Dirección</label>
+      <input type="text" id="np-direccion">
+      <p id="msg-nuevo-proveedor" class="mensaje"></p>
+      <div class="modal-acciones">
+        <button type="button" class="secundario" data-cerrar="modal-nuevo-proveedor">Cancelar</button>
+        <button type="submit">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="modal-editar-cliente" class="modal-overlay oculto">
+  <div class="modal-contenido">
+    <div class="modal-encabezado">
+      <h3>Editar cliente</h3>
+      <button type="button" class="btn-cerrar" data-cerrar="modal-editar-cliente">&times;</button>
+    </div>
+    <form id="form-editar-cliente" class="modal-form">
+      <input type="hidden" id="edit-id-cliente">
+      <label class="etiqueta-campo">Documento</label>
+      <input type="text" id="edit-cli-documento" disabled>
+      <label class="etiqueta-campo" for="edit-cli-nombre">Nombre</label>
+      <input type="text" id="edit-cli-nombre" required>
+      <label class="etiqueta-campo" for="edit-cli-contacto">Contacto</label>
+      <input type="text" id="edit-cli-contacto">
+      <p id="msg-editar-cliente" class="mensaje"></p>
+      <div class="modal-acciones">
+        <button type="button" class="secundario" data-cerrar="modal-editar-cliente">Cancelar</button>
+        <button type="submit">Guardar cambios</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="modal-olvido" class="modal-overlay oculto">
+  <div class="modal-contenido">
+    <div class="modal-encabezado">
+      <h3>Recuperar contraseña</h3>
+      <button type="button" class="btn-cerrar" data-cerrar="modal-olvido">&times;</button>
+    </div>
+    <form id="form-olvido" class="modal-form">
+      <p>Ingresa tu correo. Un administrador restablecerá tu acceso desde la pestaña Vendedores.</p>
+      <input type="email" id="olvido-correo" placeholder="Correo" required>
+      <p id="msg-olvido" class="mensaje"></p>
+      <div class="modal-acciones">
+        <button type="button" class="secundario" data-cerrar="modal-olvido">Cerrar</button>
+        <button type="submit">Enviar solicitud</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="modal-editar-producto" class="modal-overlay oculto">
+  <div class="modal-contenido">
+    <div class="modal-encabezado">
+      <h3>Editar Producto</h3>
+      <button id="btn-cerrar-modal" type="button" class="btn-cerrar" title="Cerrar">&times;</button>
+    </div>
+    <form id="form-editar-producto" class="modal-form">
+      <input type="hidden" id="edit-id-producto">
+      
+      <label class="etiqueta-campo" for="edit-sku">SKU (Código único)</label>
+      <input type="text" id="edit-sku" disabled>
+
+      <label class="etiqueta-campo" for="edit-nombre">Nombre del Producto</label>
+      <input type="text" id="edit-nombre" pattern="[A-Za-zÁ-ÿ0-9\s.'-]{2,150}" title="Debe contener letras o números válidos" required>
+
+      <label class="etiqueta-campo" for="edit-marca">Marca</label>
+      <input type="text" id="edit-marca" pattern="[A-Za-zÁ-ÿ0-9\s.'-]{0,150}" title="Debe contener letras o números válidos">
+
+      <label class="etiqueta-campo" for="edit-categoria">Categoría</label>
+      <select id="edit-categoria" required></select>
+
+      <label class="etiqueta-campo" for="edit-precio">Precio de Venta Sugerido ($)</label>
+      <input type="number" id="edit-precio" step="0.01" min="100" required>
+
+      <label class="etiqueta-campo" for="edit-stockmin">Stock Mínimo</label>
+      <input type="number" id="edit-stockmin" min="0" required>
+
+      <label class="etiqueta-campo" for="edit-estado">Estado</label>
+      <select id="edit-estado">
+        <option value="ACTIVO">Activo</option>
+        <option value="INACTIVO">Inactivo</option>
+      </select>
+
+      <p id="msg-editar-producto" class="mensaje"></p>
+
+      <div class="modal-acciones">
+        <button type="button" id="btn-cancelar-modal" class="secundario">Cancelar</button>
+        <button type="submit">Guardar Cambios</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
+
