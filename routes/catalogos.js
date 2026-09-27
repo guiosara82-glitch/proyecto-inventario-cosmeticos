@@ -16,7 +16,7 @@ router.get('/categorias', async (req, res) => {
 
 router.post('/categorias', async (req, res) => {
   try {
-    const { nombre } = req.body;
+    const { nombre, requiere_vencimiento = true } = req.body;
     if (!nombre) {
       return res.status(400).json({ error: 'El nombre de la categoría es obligatorio.' });
     }
@@ -27,7 +27,10 @@ router.post('/categorias', async (req, res) => {
     if (existe.length > 0) {
       return res.status(409).json({ error: 'Esa categoría ya existe.' });
     }
-    const [result] = await db.query('INSERT INTO categorias (nombre) VALUES (?)', [nombre.trim()]);
+    const [result] = await db.query(
+      'INSERT INTO categorias (nombre, requiere_vencimiento) VALUES (?, ?)',
+      [nombre.trim(), requiere_vencimiento === false || requiere_vencimiento === 0 ? 0 : 1]
+    );
     res.status(201).json({ id_categoria: result.insertId, mensaje: 'Categoría registrada correctamente.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -101,4 +104,3 @@ router.get('/usuarios', async (req, res) => {
 });
 
 module.exports = router;
-

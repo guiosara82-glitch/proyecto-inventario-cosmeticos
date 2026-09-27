@@ -7,6 +7,7 @@ router.get('/', async (req, res) => {
   try {
     const { buscar, solo_activos } = req.query;
     let sql = `SELECT p.*, c.nombre AS categoria,
+              c.requiere_vencimiento,
               (SELECT dc.costo_unitario 
                FROM detalle_compra dc 
                WHERE dc.id_producto = p.id_producto 

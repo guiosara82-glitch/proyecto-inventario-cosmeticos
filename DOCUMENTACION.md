@@ -62,6 +62,7 @@ Existen dos roles configurados en la base de datos:
 - **Carrito Multi-Producto:** Se pueden agregar múltiples productos a una misma venta antes de confirmarla, visualizando cantidad, concepto, subtotales y total general.
 - **Conceptos:** `VENTA`, `MUESTRA` o `DAÑADO`.
 - **Exclusión de Lotes Vencidos:** El sistema ignora lotes cuya fecha de vencimiento sea anterior a la fecha actual (`fecha_vencimiento < CURDATE()`), bloqueando la venta de producto vencido.
+- **Vencimiento según categoría:** Las categorías con `requiere_vencimiento = 1` exigen fecha en cada entrada y bloquean la venta de lotes vencidos. Las categorías con `requiere_vencimiento = 0` permiten entradas sin fecha, por ejemplo herramientas eléctricas para el cabello.
 - **Deducción FIFO:** Se consumen primero los lotes vigentes con fecha de vencimiento más próxima.
 - **Validación de Ganancia:** En salidas por venta, el precio de salida debe superar el costo del lote que se descuenta.
 - **Productos Inactivos:** No aparecen en los selectores ni pueden ser comercializados.

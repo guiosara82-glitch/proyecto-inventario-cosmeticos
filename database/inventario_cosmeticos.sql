@@ -48,6 +48,7 @@ CREATE TABLE usuarios (
 CREATE TABLE categorias (
   id_categoria INT NOT NULL AUTO_INCREMENT,
   nombre VARCHAR(100) NOT NULL,
+  requiere_vencimiento TINYINT(1) NOT NULL DEFAULT 1,
   PRIMARY KEY (id_categoria),
   UNIQUE KEY nombre (nombre)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -110,7 +111,7 @@ CREATE TABLE detalle_compra (
   cantidad INT NOT NULL,
   cantidad_disponible INT NOT NULL,
   costo_unitario DECIMAL(10,2) NOT NULL,
-  fecha_vencimiento DATE NOT NULL,
+  fecha_vencimiento DATE DEFAULT NULL,
   PRIMARY KEY (id_detalle_compra),
   KEY id_compra (id_compra),
   KEY idx_detalle_compra_producto (id_producto),

@@ -41,15 +41,10 @@ router.post('/', async (req, res) => {
       if (!costo_unitario || costo_unitario <= 0) {
         return res.status(400).json({ error: 'El costo unitario debe ser mayor a cero.' });
       }
-      if (!fecha_vencimiento) {
-        return res.status(400).json({ error: 'La fecha de vencimiento es obligatoria para cada lote.' });
-      }
-      if (new Date(fecha_vencimiento) <= new Date()) {
-        return res.status(400).json({ error: 'La fecha de vencimiento debe ser posterior a hoy.' });
-      }
-
       const [[producto]] = await conn.query(
-        'SELECT nombre, precio, estado FROM productos WHERE id_producto = ?',
+        `SELECT p.nombre, p.precio, p.estado, c.requiere_vencimiento
+         FROM productos p JOIN categorias c ON p.id_categoria = c.id_categoria
+         WHERE p.id_producto = ?`,
         [id_producto]
       );
       if (!producto) {
@@ -58,6 +53,15 @@ router.post('/', async (req, res) => {
       if (producto.estado === 'INACTIVO') {
         return res.status(400).json({ error: `El producto "${producto.nombre}" está inactivo y no recibe entradas.` });
       }
+      if (Number(producto.requiere_vencimiento) === 1) {
+        if (!fecha_vencimiento) {
+          return res.status(400).json({ error: `La categoría del producto "${producto.nombre}" requiere fecha de vencimiento.` });
+        }
+        if (new Date(fecha_vencimiento) <= new Date()) {
+          return res.status(400).json({ error: 'La fecha de vencimiento debe ser posterior a hoy.' });
+        }
+      }
+      item.fecha_vencimiento = Number(producto.requiere_vencimiento) === 1 ? fecha_vencimiento : null;
       if (parseFloat(costo_unitario) >= parseFloat(producto.precio)) {
         return res.status(400).json({
           error: `El costo de compra ($${Number(costo_unitario).toFixed(2)}) para "${producto.nombre}" no puede ser mayor o igual a su precio de venta establecido ($${Number(producto.precio).toFixed(2)}). Debe existir margen de ganancia.`

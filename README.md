@@ -74,6 +74,19 @@ La sesión dura 8 horas (JWT).
 ## Datos de prueba incluidos
 
 - Categorías: Skincare, Maquillaje, Cabello, Perfumería.
+
+### Fechas de vencimiento por categoría
+
+Las categorías actuales requieren fecha de vencimiento. Al crear una categoría nueva,
+se puede desmarcar **Esta categoría requiere fecha de vencimiento** para artículos
+duraderos, por ejemplo una categoría **Herramientas para cabello** para planchas y
+secadores. Así, los productos cosméticos de la categoría **Cabello** conservan su
+control de vencimiento.
+
+En una base de datos existente, ejecutar una sola vez
+`database/migracion_vencimiento_por_categoria.sql` antes de desplegar la actualización.
+La base que se crea desde cero con `database/inventario_cosmeticos.sql` ya incluye
+estos cambios.
 - Productos con precio de venta mayor al costo de compra (hay margen).
 - Lotes para validar caducidad:
   - un lote **vencido** (crema de arroz)

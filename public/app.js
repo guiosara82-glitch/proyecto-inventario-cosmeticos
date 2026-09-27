@@ -409,6 +409,7 @@ if (btnModalNuevaCat && modalNuevaCat) {
   btnModalNuevaCat.addEventListener('click', () => {
     modalNuevaCat.classList.remove('oculto');
     document.getElementById('cat-nombre').value = '';
+    document.getElementById('cat-requiere-vencimiento').checked = true;
     document.getElementById('msg-nueva-categoria').textContent = '';
   });
 }
@@ -416,10 +417,11 @@ if (formNuevaCat) {
   formNuevaCat.addEventListener('submit', async (e) => {
     e.preventDefault();
     const nombre = document.getElementById('cat-nombre').value.trim();
+    const requiere_vencimiento = document.getElementById('cat-requiere-vencimiento').checked;
     try {
       const res = await apiFetch(`${API}/catalogos/categorias`, {
         method: 'POST',
-        body: JSON.stringify({ nombre })
+        body: JSON.stringify({ nombre, requiere_vencimiento })
       });
       const data = await res.json();
       if (res.ok) {
@@ -679,7 +681,22 @@ async function cargarProductosSelects() {
 }
 
 const cProdEl = document.getElementById('c-producto');
-if (cProdEl) cProdEl.addEventListener('change', actualizarInfoCompra);
+function actualizarCampoVencimiento() {
+  const producto = listaProductosCache.find(p => String(p.id_producto) === String(cProdEl?.value));
+  const grupo = document.getElementById('grupo-vencimiento');
+  const input = document.getElementById('c-vencimiento');
+  if (!grupo || !input) return;
+
+  const requiere = !producto || Number(producto.requiere_vencimiento) === 1;
+  grupo.classList.toggle('oculto', !requiere);
+  input.required = requiere;
+  if (!requiere) input.value = '';
+}
+
+if (cProdEl) cProdEl.addEventListener('change', () => {
+  actualizarInfoCompra();
+  actualizarCampoVencimiento();
+});
 const cCostoEl = document.getElementById('c-costo');
 if (cCostoEl) cCostoEl.addEventListener('input', actualizarInfoCompra);
 
@@ -846,7 +863,7 @@ async function cargarCompras() {
       <tr>
         <td>${c.producto} (${c.sku})</td><td>${c.proveedor}</td><td>${c.cantidad}</td>
         <td>${c.cantidad_disponible}</td><td>$${Number(c.costo_unitario).toFixed(2)}</td>
-        <td>${new Date(c.fecha_vencimiento).toLocaleDateString()}</td>
+        <td>${c.fecha_vencimiento ? new Date(c.fecha_vencimiento).toLocaleDateString() : 'No aplica'}</td>
         <td>${new Date(c.fecha_compra).toLocaleDateString()}</td>
       </tr>`).join('') || '<tr><td colspan="7">Sin registros</td></tr>';
   } catch (err) {
@@ -872,7 +889,7 @@ document.getElementById('form-compra').addEventListener('submit', async (e) => {
       id_producto: idProducto,
       cantidad: parseInt(document.getElementById('c-cantidad').value),
       costo_unitario: costoUnitario,
-      fecha_vencimiento: document.getElementById('c-vencimiento').value
+      fecha_vencimiento: document.getElementById('c-vencimiento').value || null
     }]
   };
 
@@ -882,6 +899,7 @@ document.getElementById('form-compra').addEventListener('submit', async (e) => {
     if (res.ok) {
       mostrarMensaje('msg-compra', data.mensaje, 'exito');
       e.target.reset();
+      actualizarCampoVencimiento();
       document.getElementById('info-costo-compra').classList.add('oculto');
       document.getElementById('c-costo').classList.remove('campo-invalido');
       ajustarFechaMinima();

@@ -53,7 +53,9 @@ router.post('/', async (req, res) => {
       }
 
       const [[producto]] = await conn.query(
-        'SELECT stock_actual, stock_minimo, nombre, estado FROM productos WHERE id_producto = ? FOR UPDATE',
+        `SELECT p.stock_actual, p.stock_minimo, p.nombre, p.estado, c.requiere_vencimiento
+         FROM productos p JOIN categorias c ON p.id_categoria = c.id_categoria
+         WHERE p.id_producto = ? FOR UPDATE`,
         [id_producto]
       );
       if (!producto) {
@@ -65,10 +67,13 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: `El producto "${producto.nombre}" está inactivo y no se puede vender.` });
       }
 
+      const filtroVencimiento = Number(producto.requiere_vencimiento) === 1
+        ? 'AND fecha_vencimiento >= CURDATE()'
+        : '';
       const [[stockVigente]] = await conn.query(
         `SELECT COALESCE(SUM(cantidad_disponible), 0) AS disponible
          FROM detalle_compra
-         WHERE id_producto = ? AND cantidad_disponible > 0 AND fecha_vencimiento >= CURDATE()`,
+         WHERE id_producto = ? AND cantidad_disponible > 0 ${filtroVencimiento}`,
         [id_producto]
       );
       const disponibleVigente = Number(stockVigente.disponible);
@@ -83,8 +88,8 @@ router.post('/', async (req, res) => {
         const [lotes] = await conn.query(
           `SELECT id_detalle_compra, cantidad_disponible, costo_unitario
            FROM detalle_compra
-           WHERE id_producto = ? AND cantidad_disponible > 0 AND fecha_vencimiento >= CURDATE()
-           ORDER BY fecha_vencimiento ASC`,
+           WHERE id_producto = ? AND cantidad_disponible > 0 ${filtroVencimiento}
+           ORDER BY fecha_vencimiento IS NULL ASC, fecha_vencimiento ASC`,
           [id_producto]
         );
         let restanteCheck = cantidad;
@@ -116,8 +121,12 @@ router.post('/', async (req, res) => {
       const [lotes] = await conn.query(
         `SELECT id_detalle_compra, cantidad_disponible
          FROM detalle_compra
-         WHERE id_producto = ? AND cantidad_disponible > 0 AND fecha_vencimiento >= CURDATE()
-         ORDER BY fecha_vencimiento ASC`,
+         WHERE id_producto = ? AND cantidad_disponible > 0
+           AND (EXISTS (
+             SELECT 1 FROM productos p JOIN categorias c ON p.id_categoria = c.id_categoria
+             WHERE p.id_producto = detalle_compra.id_producto AND c.requiere_vencimiento = 0
+           ) OR fecha_vencimiento >= CURDATE())
+         ORDER BY fecha_vencimiento IS NULL ASC, fecha_vencimiento ASC`,
         [id_producto]
       );
 

@@ -88,8 +88,10 @@
       <input type="number" id="c-cantidad" placeholder="Cantidad" min="1" required>
       <input type="number" id="c-costo" placeholder="Costo unitario" step="0.01" min="0.01" required>
       <div id="info-costo-compra" class="info-precio oculto"></div>
-      <label for="c-vencimiento" class="etiqueta-campo">Fecha de vencimiento</label>
-      <input type="date" id="c-vencimiento" required>
+      <div id="grupo-vencimiento">
+        <label for="c-vencimiento" class="etiqueta-campo">Fecha de vencimiento</label>
+        <input type="date" id="c-vencimiento" required>
+      </div>
       <button type="submit">Registrar Entrada</button>
     </form>
     <p id="msg-compra" class="mensaje"></p>
@@ -243,6 +245,7 @@
     <form id="form-nueva-categoria" class="modal-form">
       <label class="etiqueta-campo" for="cat-nombre">Nombre</label>
       <input type="text" id="cat-nombre" required>
+      <label class="etiqueta-campo"><input type="checkbox" id="cat-requiere-vencimiento" checked> Esta categoría requiere fecha de vencimiento</label>
       <p id="msg-nueva-categoria" class="mensaje"></p>
       <div class="modal-acciones">
         <button type="button" class="secundario" data-cerrar="modal-nueva-categoria">Cancelar</button>
@@ -363,4 +366,3 @@
 <script src="app.js"></script>
 </body>
 </html>
-
