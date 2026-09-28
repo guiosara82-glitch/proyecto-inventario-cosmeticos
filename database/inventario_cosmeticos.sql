@@ -169,15 +169,15 @@ CREATE TABLE alertas (
   CONSTRAINT alertas_chk_1 CHECK ((tipo IN ('CADUCIDAD','STOCK_CRITICO')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Contraseña de todos los usuarios de prueba: Prueba123
+-- Contraseña admin: Admin1234 | Contraseña vendedor: Vendedor1234
 INSERT INTO roles (id_rol, nombre) VALUES
   (1, 'Administrador'),
   (2, 'Vendedor');
 
 INSERT INTO usuarios (id_usuario, nombre, correo, telefono, id_rol, estado, password) VALUES
-  (1, 'Admin Prueba', 'admin@correo.com', '3001112233', 1, 'ACTIVO', '$2b$10$R7gGG9zdXoYUOOGtPqH34uwH.dR/J2IRFK9hLKoBEtsez44717FeO'),
-  (2, 'Vendedora Prueba', 'vendedor@correo.com', '3002223344', 2, 'ACTIVO', '$2b$10$R7gGG9zdXoYUOOGtPqH34uwH.dR/J2IRFK9hLKoBEtsez44717FeO'),
-  (3, 'Usuario Inactivo', 'inactivo@correo.com', '3003334455', 2, 'INACTIVO', '$2b$10$R7gGG9zdXoYUOOGtPqH34uwH.dR/J2IRFK9hLKoBEtsez44717FeO');
+  (1, 'Admin Prueba', 'admin@correo.com', '3001112233', 1, 'ACTIVO', '$2b$10$4SsRd1VH0wylDnetOSD.TefIOPQFfytFw2B3p3.mHDdQcI5IYqluK'),
+  (2, 'Vendedora Prueba', 'vendedor@correo.com', '3002223344', 2, 'ACTIVO', '$2b$10$9X9FOki697MBToHdfoIrvOMoMrmc/f8Socclx7TZOUH9GxsP37rzW'),
+  (3, 'Usuario Inactivo', 'inactivo@correo.com', '3003334455', 2, 'INACTIVO', '$2b$10$9X9FOki697MBToHdfoIrvOMoMrmc/f8Socclx7TZOUH9GxsP37rzW');
 
 INSERT INTO categorias (id_categoria, nombre) VALUES
   (1, 'Skincare'),
