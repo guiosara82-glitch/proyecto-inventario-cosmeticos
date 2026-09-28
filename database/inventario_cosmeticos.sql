@@ -179,11 +179,12 @@ INSERT INTO usuarios (id_usuario, nombre, correo, telefono, id_rol, estado, pass
   (2, 'Vendedora Prueba', 'vendedor@correo.com', '3002223344', 2, 'ACTIVO', '$2b$10$9X9FOki697MBToHdfoIrvOMoMrmc/f8Socclx7TZOUH9GxsP37rzW'),
   (3, 'Usuario Inactivo', 'inactivo@correo.com', '3003334455', 2, 'INACTIVO', '$2b$10$9X9FOki697MBToHdfoIrvOMoMrmc/f8Socclx7TZOUH9GxsP37rzW');
 
-INSERT INTO categorias (id_categoria, nombre) VALUES
-  (1, 'Skincare'),
-  (2, 'Maquillaje'),
-  (3, 'Cabello'),
-  (4, 'Perfumería');
+INSERT INTO categorias (id_categoria, nombre, requiere_vencimiento) VALUES
+  (1, 'Skincare', 1),
+  (2, 'Maquillaje', 1),
+  (3, 'Cabello', 1),
+  (4, 'Perfumería', 1),
+  (5, 'Herramientas y Eléctricos', 0);
 
 INSERT INTO proveedores (id_proveedor, nombre, contacto, telefono, direccion) VALUES
   (1, 'Cosméticos del Valle', 'Laura Pérez', '3105556677', 'Cali, Valle del Cauca'),
