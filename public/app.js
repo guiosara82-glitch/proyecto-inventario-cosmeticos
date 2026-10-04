@@ -1303,10 +1303,6 @@ async function descargarPdf(url, nombreArchivo) {
   window.URL.revokeObjectURL(urlBlob);
 }
 
-document.getElementById('btn-generar-caducidad').addEventListener('click', async () => {
-  const tabla = document.getElementById('tabla-reporte-caducidad');
-  const btnDescargar = document.getElementById('btn-descargar-caducidad');
-  try {
 // ==========================================
 // COMPROBANTE DE VENTA (Contexto Colombiano)
 // ==========================================
@@ -1424,7 +1420,17 @@ function inicializarSelectorReportes() {
       const targetId = btn.getAttribute('data-subrep');
       document.querySelectorAll('.subrep-panel').forEach(p => p.classList.add('oculto'));
       const targetPanel = document.getElementById(targetId);
-      if (targetPanel) targetPanel.classList.remove('oculto');
+      if (targetPanel) {
+        targetPanel.classList.remove('oculto');
+        if (targetId === 'subrep-inventario') consultarReporteInventario();
+        else if (targetId === 'subrep-caducidad') consultarReporteCaducidad();
+        else if (targetId === 'subrep-cliente') consultarReporteVentasCliente();
+        else if (targetId === 'subrep-proveedor') consultarReporteComprasProveedor();
+        else if (targetId === 'subrep-kardex') {
+          const selK = document.getElementById('filtro-kardex-producto');
+          if (selK && selK.value) consultarReporteKardex();
+        }
+      }
     });
   });
 }
@@ -1438,6 +1444,12 @@ async function cargarFiltrosReportes() {
     if (selCat) {
       selCat.innerHTML = '<option value="">Todas las categorías</option>' +
         cats.map(c => `<option value="${c.id_categoria}">${c.nombre}</option>`).join('');
+      selCat.onchange = consultarReporteInventario;
+    }
+
+    const selInvEst = document.getElementById('filtro-inv-estado');
+    if (selInvEst) {
+      selInvEst.onchange = consultarReporteInventario;
     }
 
     // Productos en filtro kardex
@@ -1447,6 +1459,12 @@ async function cargarFiltrosReportes() {
     if (selKardex) {
       selKardex.innerHTML = '<option value="">Selecciona un producto para ver su Kardex...</option>' +
         prods.map(p => `<option value="${p.id_producto}">${p.nombre} (${p.sku})</option>`).join('');
+      if (prods.length > 0 && !selKardex.value) {
+        selKardex.value = prods[0].id_producto;
+      }
+      selKardex.onchange = () => {
+        if (selKardex.value) consultarReporteKardex();
+      };
     }
 
     // Clientes en filtro ventas cliente
@@ -1456,6 +1474,7 @@ async function cargarFiltrosReportes() {
     if (selCli) {
       selCli.innerHTML = '<option value="">Todos los clientes</option>' +
         clis.map(c => `<option value="${c.id_cliente}">${c.nombre} (Doc: ${c.documento_identidad})</option>`).join('');
+      selCli.onchange = consultarReporteVentasCliente;
     }
 
     // Proveedores en filtro compras proveedor
@@ -1465,6 +1484,12 @@ async function cargarFiltrosReportes() {
     if (selProv) {
       selProv.innerHTML = '<option value="">Todos los proveedores</option>' +
         provs.map(pr => `<option value="${pr.id_proveedor}">${pr.nombre}</option>`).join('');
+      selProv.onchange = consultarReporteComprasProveedor;
+    }
+
+    const selCadDias = document.getElementById('filtro-caducidad-dias');
+    if (selCadDias) {
+      selCadDias.onchange = consultarReporteCaducidad;
     }
   } catch (err) {
     console.error('Error cargando filtros de reportes:', err);
