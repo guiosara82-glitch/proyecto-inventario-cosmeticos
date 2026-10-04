@@ -540,36 +540,54 @@ router.get('/compras-proveedor', async (req, res) => {
 // ========================================================
 router.get('/caducidad', async (req, res) => {
   try {
-    const dias = parseInt(req.query.dias) || 30;
-    const [rows] = await db.query(
-      `SELECT dc.id_detalle_compra, p.nombre AS producto, p.sku, dc.cantidad_disponible,
+    const { dias = 60, buscar, id_producto, formato } = req.query;
+    let sql = `SELECT dc.id_detalle_compra, p.nombre AS producto, p.sku, dc.cantidad_disponible,
               dc.fecha_vencimiento,
               DATEDIFF(dc.fecha_vencimiento, CURDATE()) AS dias_restantes,
               CASE
                 WHEN dc.fecha_vencimiento < CURDATE() THEN 'VENCIDO'
-                WHEN DATEDIFF(dc.fecha_vencimiento, CURDATE()) <= 30 THEN 'URGENTE'
+                WHEN DATEDIFF(dc.fecha_vencimiento, CURDATE()) <= 30 THEN 'URGENTE (<=30d)'
+                WHEN DATEDIFF(dc.fecha_vencimiento, CURDATE()) <= 60 THEN 'PROXIMO (2 meses)'
+                WHEN DATEDIFF(dc.fecha_vencimiento, CURDATE()) <= 90 THEN 'PROXIMO (3 meses)'
                 ELSE 'PROXIMO'
               END AS estado
        FROM detalle_compra dc
        JOIN productos p ON dc.id_producto = p.id_producto
        WHERE dc.cantidad_disponible > 0
-         AND dc.fecha_vencimiento IS NOT NULL
-         AND DATEDIFF(dc.fecha_vencimiento, CURDATE()) <= ?
-       ORDER BY dc.fecha_vencimiento ASC`,
-      [dias]
-    );
+         AND dc.fecha_vencimiento IS NOT NULL`;
 
+    const params = [];
+    if (dias && dias !== 'todos') {
+      sql += ' AND DATEDIFF(dc.fecha_vencimiento, CURDATE()) <= ?';
+      params.push(parseInt(dias));
+    }
+    if (id_producto) {
+      sql += ' AND dc.id_producto = ?';
+      params.push(id_producto);
+    }
+    if (buscar) {
+      sql += ' AND (p.nombre LIKE ? OR p.sku LIKE ?)';
+      params.push(`%${buscar}%`, `%${buscar}%`);
+    }
+
+    sql += ' ORDER BY dc.fecha_vencimiento ASC';
+
+    const [rows] = await db.query(sql, params);
     const filas = enriquecerCaducidad(rows);
 
-    if (req.query.formato === 'pdf') {
+    if (formato === 'pdf') {
       if (filas.length === 0) {
-        return res.status(404).json({ error: 'No hay datos para generar el reporte.' });
+        return res.status(404).json({ error: 'No hay datos para generar el reporte con los filtros seleccionados.' });
       }
+      const subtitulo = dias === 'todos'
+        ? `Todos los lotes con fecha de vencimiento registrada${buscar ? ' | Filtro: "' + buscar + '"' : ''}`
+        : `Lotes con vencimiento en un lapso de ${dias} días (${Math.round(dias / 30)} meses aprox.) o ya vencidos${buscar ? ' | Filtro: "' + buscar + '"' : ''}`;
+
       return generarPdfTabla(
         res,
         `reporte_caducidad_${new Date().toISOString().slice(0, 10)}.pdf`,
         'Reporte de Alertas de Caducidad y Vencimiento',
-        `Productos con vencimiento en un lapso de ${dias} días o ya vencidos`,
+        subtitulo,
         [
           { titulo: 'Lote #', clave: 'id_detalle_compra', align: 'center' },
           { titulo: 'Producto', clave: 'producto', align: 'left' },
@@ -588,6 +606,7 @@ router.get('/caducidad', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // ========================================================
 // 7. REPORTE DE MOVIMIENTOS HISTÓRICOS (ENTRADAS Y SALIDAS)

@@ -1251,17 +1251,29 @@ function textoDiasCaducidad(item) {
 
 async function cargarAlertas() {
   try {
-    const res = await apiFetch(`${API}/alertas/caducidad?dias=30`);
+    const selDias = document.getElementById('filtro-alertas-dias');
+    const inputBuscar = document.getElementById('filtro-alertas-buscar');
+    const dias = selDias ? selDias.value : 60;
+    const buscar = inputBuscar ? inputBuscar.value.trim() : '';
+
+    let url = `${API}/alertas/caducidad?dias=${dias}`;
+    if (buscar) url += `&buscar=${encodeURIComponent(buscar)}`;
+
+    const res = await apiFetch(url);
     const data = await res.json();
     const tbody = document.querySelector('#tabla-alertas tbody');
     if (!tbody) return;
 
     tbody.innerHTML = data.map(a => `
-      <tr class="${a.estado.toLowerCase() === 'vencido' ? 'vencido' : 'urgente'}">
-        <td>${a.producto}</td><td>${a.sku}</td><td>${a.cantidad_disponible}</td>
-        <td>${new Date(a.fecha_vencimiento).toLocaleDateString()}</td>
-        <td><strong>${textoDiasCaducidad(a)}</strong></td><td>${a.estado}</td>
-      </tr>`).join('') || '<tr><td colspan="6">No hay alertas activas</td></tr>';
+      <tr class="${a.estado.toLowerCase().includes('vencido') ? 'vencido' : 'urgente'}">
+        <td><strong>Lote #${a.id_detalle_compra}</strong></td>
+        <td>${a.producto}</td>
+        <td>${a.sku}</td>
+        <td style="text-align:center;">${a.cantidad_disponible}</td>
+        <td style="text-align:center;">${new Date(a.fecha_vencimiento).toLocaleDateString('es-CO')}</td>
+        <td style="text-align:center;"><strong>${textoDiasCaducidad(a)}</strong></td>
+        <td style="text-align:center;"><span class="badge ${a.estado === 'VENCIDO' ? 'badge-inactivo' : 'badge-admin'}">${a.estado}</span></td>
+      </tr>`).join('') || '<tr><td colspan="7">No hay lotes con vencimiento para el criterio seleccionado.</td></tr>';
   } catch (err) {
     console.error(err);
   }
@@ -1668,12 +1680,17 @@ async function consultarReporteComprasProveedor() {
 
 // 5. Reporte: Caducidad
 async function consultarReporteCaducidad() {
-  const dias = document.getElementById('filtro-caducidad-dias').value || 30;
+  const dias = document.getElementById('filtro-caducidad-dias').value || 60;
+  const inputBuscar = document.getElementById('filtro-caducidad-buscar');
+  const buscar = inputBuscar ? inputBuscar.value.trim() : '';
   const tbody = document.querySelector('#tabla-reporte-caducidad tbody');
   const msgEl = 'msg-reporte-caducidad';
 
   try {
-    const res = await apiFetch(`${API}/reportes/caducidad?dias=${dias}`);
+    let url = `${API}/reportes/caducidad?dias=${dias}`;
+    if (buscar) url += `&buscar=${encodeURIComponent(buscar)}`;
+
+    const res = await apiFetch(url);
     const data = await res.json();
 
     if (!res.ok) {
@@ -1682,7 +1699,7 @@ async function consultarReporteCaducidad() {
     }
 
     tbody.innerHTML = data.map(a => `
-      <tr class="${a.estado.toLowerCase() === 'vencido' ? 'vencido' : 'urgente'}">
+      <tr class="${a.estado.toLowerCase().includes('vencido') ? 'vencido' : 'urgente'}">
         <td><strong>Lote #${a.id_detalle_compra}</strong></td>
         <td>${a.producto}</td>
         <td>${a.sku}</td>
@@ -1691,7 +1708,7 @@ async function consultarReporteCaducidad() {
         <td style="text-align:center;"><strong>${textoDiasCaducidad(a)}</strong></td>
         <td style="text-align:center;"><span class="badge ${a.estado === 'VENCIDO' ? 'badge-inactivo' : 'badge-admin'}">${a.estado}</span></td>
       </tr>
-    `).join('') || '<tr><td colspan="7">No hay lotes próximos a vencer en el periodo seleccionado.</td></tr>';
+    `).join('') || '<tr><td colspan="7">No hay lotes con vencimiento para el criterio seleccionado.</td></tr>';
 
     mostrarMensaje(msgEl, `Reporte generado: ${data.length} lote(s) encontrados.`, 'exito');
   } catch (err) {
@@ -1811,8 +1828,12 @@ function configurarEventosReportes() {
   const btnPdfCad = document.getElementById('btn-descargar-caducidad');
   if (btnPdfCad) {
     btnPdfCad.onclick = () => {
-      const dias = document.getElementById('filtro-caducidad-dias').value || 30;
-      descargarPdf(`${API}/reportes/caducidad?dias=${dias}&formato=pdf`, `reporte_caducidad_${dias}_dias.pdf`);
+      const dias = document.getElementById('filtro-caducidad-dias').value || 60;
+      const inputBuscar = document.getElementById('filtro-caducidad-buscar');
+      const buscar = inputBuscar ? inputBuscar.value.trim() : '';
+      let url = `${API}/reportes/caducidad?dias=${dias}&formato=pdf`;
+      if (buscar) url += `&buscar=${encodeURIComponent(buscar)}`;
+      descargarPdf(url, `reporte_caducidad_${dias}_dias.pdf`);
     };
   }
   const btnPrintCad = document.getElementById('btn-print-caducidad');
@@ -1832,6 +1853,17 @@ function configurarEventosReportes() {
   }
   const btnPrintMov = document.getElementById('btn-print-movimientos');
   if (btnPrintMov) btnPrintMov.onclick = () => window.print();
+
+  // Filtros dinámicos de pestaña Alertas
+  const selAlertasDias = document.getElementById('filtro-alertas-dias');
+  if (selAlertasDias) selAlertasDias.onchange = cargarAlertas;
+  const inputAlertasBuscar = document.getElementById('filtro-alertas-buscar');
+  if (inputAlertasBuscar) {
+    inputAlertasBuscar.oninput = () => {
+      clearTimeout(window._timeoutAlertas);
+      window._timeoutAlertas = setTimeout(cargarAlertas, 250);
+    };
+  }
 }
 
 // ==========================================
