@@ -630,11 +630,23 @@ function actualizarInfoVenta(autollenar = false) {
   }
 
   const precioVenta = parseFloat(inputPrecio.value);
-  const costoRef = (prod.ultimo_costo !== null && prod.ultimo_costo !== undefined) ? parseFloat(prod.ultimo_costo) : null;
+  const costoRef = (prod.costo_lote_fifo !== null && prod.costo_lote_fifo !== undefined)
+    ? parseFloat(prod.costo_lote_fifo)
+    : ((prod.ultimo_costo !== null && prod.ultimo_costo !== undefined) ? parseFloat(prod.ultimo_costo) : null);
 
   let html = `<span>Precio base sugerido: <strong>$${Number(prod.precio).toFixed(2)}</strong></span>`;
-  if (costoRef !== null) {
-    html += ` | <span>Costo compra del lote/proveedor: <strong>$${costoRef.toFixed(2)}</strong></span>`;
+  if (prod.id_lote_fifo) {
+    html += ` | <span class="badge badge-activo" style="font-size:0.85rem; padding: 2px 8px;">📦 Lote FIFO a despachar: Lote #${prod.id_lote_fifo}</span>`;
+    html += ` | <span>Costo de adquisición: <strong>$${costoRef.toFixed(2)}</strong></span>`;
+    if (prod.cant_lote_fifo !== undefined && prod.cant_lote_fifo !== null) {
+      html += ` | <span>Disp. en lote: <strong>${prod.cant_lote_fifo} un.</strong></span>`;
+    }
+    if (prod.vencimiento_lote_fifo) {
+      const fechaVenc = new Date(prod.vencimiento_lote_fifo).toLocaleDateString('es-CO');
+      html += ` | <span>Vence: <strong>${fechaVenc}</strong></span>`;
+    }
+  } else if (costoRef !== null) {
+    html += ` | <span>Costo de adquisición (FIFO): <strong>$${costoRef.toFixed(2)}</strong></span>`;
   }
 
   if (!isNaN(precioVenta)) {
@@ -643,12 +655,12 @@ function actualizarInfoVenta(autollenar = false) {
       html += `<br><span class="ganancia-negativa">⚠️ El precio de venta debe ser mayor a cero.</span>`;
     } else if (costoRef !== null && precioVenta <= costoRef) {
       inputPrecio.classList.add('campo-invalido');
-      html += `<br><span class="ganancia-negativa">⚠️ El precio ($${precioVenta.toFixed(2)}) es menor o igual al costo ($${costoRef.toFixed(2)}). Debes venderlo a mayor precio para obtener ganancia.</span>`;
+      html += `<br><span class="ganancia-negativa">⚠️ El precio ($${precioVenta.toFixed(2)}) es menor o igual al costo del lote FIFO ($${costoRef.toFixed(2)}). Debes venderlo a mayor precio para obtener ganancia.</span>`;
     } else if (costoRef !== null) {
       inputPrecio.classList.remove('campo-invalido');
       const ganancia = precioVenta - costoRef;
       const margenPct = ((ganancia / costoRef) * 100).toFixed(1);
-      html += `<br><span class="ganancia-positiva">✅ Ganancia estimada: $${ganancia.toFixed(2)} (${margenPct}%) por unidad vendida</span>`;
+      html += `<br><span class="ganancia-positiva">✅ Ganancia estimada sobre lote FIFO: $${ganancia.toFixed(2)} (${margenPct}%) por unidad vendida</span>`;
     } else {
       inputPrecio.classList.remove('campo-invalido');
     }
@@ -989,8 +1001,12 @@ function validarYObtenerItemVentaFormulario() {
       mostrarMensaje('msg-venta', 'El precio unitario de venta debe ser un número mayor a cero.', 'error');
       return null;
     }
-    if (prod.ultimo_costo !== null && prod.ultimo_costo !== undefined && precioUnitario <= parseFloat(prod.ultimo_costo)) {
-      mostrarMensaje('msg-venta', `El precio de venta ($${precioUnitario.toFixed(2)}) debe ser mayor al costo de adquisición ($${Number(prod.ultimo_costo).toFixed(2)}) para obtener ganancia.`, 'error');
+    const costoVal = (prod.costo_lote_fifo !== null && prod.costo_lote_fifo !== undefined)
+      ? parseFloat(prod.costo_lote_fifo)
+      : ((prod.ultimo_costo !== null && prod.ultimo_costo !== undefined) ? parseFloat(prod.ultimo_costo) : null);
+
+    if (costoVal !== null && precioUnitario <= costoVal) {
+      mostrarMensaje('msg-venta', `El precio de venta ($${precioUnitario.toFixed(2)}) debe ser mayor al costo del lote FIFO a despachar ($${costoVal.toFixed(2)}) para obtener ganancia.`, 'error');
       return null;
     }
   }
@@ -1091,7 +1107,10 @@ async function cargarVentas() {
         <td>$${Number(v.precio_unitario).toFixed(2)}</td>
         <td>${v.usuario}</td>
         <td>${new Date(v.fecha_venta).toLocaleDateString()}</td>
-      </tr>`).join('') || '<tr><td colspan="7">Sin registros</td></tr>';
+        <td>
+          <button type="button" class="btn-accion btn-editar" onclick="abrirComprobanteVenta(${v.id_venta})" title="Ver comprobante de venta">🧾 Recibo</button>
+        </td>
+      </tr>`).join('') || '<tr><td colspan="8">Sin registros</td></tr>';
   } catch (err) {
     console.error(err);
   }
@@ -1288,80 +1307,507 @@ document.getElementById('btn-generar-caducidad').addEventListener('click', async
   const tabla = document.getElementById('tabla-reporte-caducidad');
   const btnDescargar = document.getElementById('btn-descargar-caducidad');
   try {
-    const res = await apiFetch(`${API}/reportes/caducidad?dias=60`);
-    if (res.status === 404 || res.status === 400) {
-      const data = await res.json();
-      mostrarMensaje('msg-reporte-caducidad', data.error, 'error');
-      tabla.classList.add('oculto');
-      btnDescargar.classList.add('oculto');
+// ==========================================
+// COMPROBANTE DE VENTA (Contexto Colombiano)
+// ==========================================
+window.abrirComprobanteVenta = async function(idVenta) {
+  try {
+    const res = await apiFetch(`${API}/ventas/${idVenta}/comprobante`);
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.error || 'No se pudo cargar el comprobante.');
       return;
     }
     const data = await res.json();
-    document.querySelector('#tabla-reporte-caducidad tbody').innerHTML = data.map(a => `
-      <tr class="${a.estado.toLowerCase() === 'vencido' ? 'vencido' : 'urgente'}">
-        <td>${a.producto}</td><td>${a.sku}</td><td>${a.cantidad_disponible}</td>
-        <td>${new Date(a.fecha_vencimiento).toLocaleDateString()}</td>
-        <td><strong>${textoDiasCaducidad(a)}</strong></td><td>${a.estado}</td>
-      </tr>`).join('');
-    tabla.classList.remove('oculto');
-    btnDescargar.classList.remove('oculto');
-    mostrarMensaje('msg-reporte-caducidad', `Reporte generado: ${data.length} lote(s) encontrados.`, 'exito');
-  } catch (err) {
-    mostrarMensaje('msg-reporte-caducidad', err.message, 'error');
-  }
-});
+    const v = data.venta;
+    const items = data.items;
 
-document.getElementById('btn-descargar-caducidad').addEventListener('click', async () => {
+    const fechaStr = new Date(v.fecha_venta).toLocaleString('es-CO');
+    const totalCOP = '$' + Number(v.total).toLocaleString('es-CO', { minimumFractionDigits: 2 });
+
+    const html = `
+      <div class="recibo-header">
+        <h4>✨ INVENTARIO DE COSMÉTICOS ✨</h4>
+        <p style="margin:2px 0;">NIT: 901.458.789-1 | Régimen Simplificado</p>
+        <p style="margin:2px 0; font-weight:bold; color:#7a4f6b;">COMPROBANTE DE VENTA N° ${v.id_venta}</p>
+        <p style="margin:2px 0; font-size:11px;">Fecha: ${fechaStr}</p>
+      </div>
+      <div class="recibo-info">
+        <div><strong>Cliente:</strong> ${v.cliente_nombre}</div>
+        <div><strong>Documento / CC:</strong> ${v.cliente_documento}</div>
+        <div><strong>Teléfono:</strong> ${v.cliente_telefono}</div>
+        <div><strong>Vendedor / Asesor:</strong> ${v.vendedor}</div>
+      </div>
+      <table class="recibo-items">
+        <thead>
+          <tr>
+            <th style="text-align:left;">Cant.</th>
+            <th style="text-align:left;">Producto (SKU)</th>
+            <th style="text-align:right;">P. Unit</th>
+            <th style="text-align:right;">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map(it => `
+            <tr>
+              <td>${it.cantidad}</td>
+              <td>${it.producto} <span style="font-size:10px; color:#666;">(${it.sku})</span></td>
+              <td style="text-align:right;">$${Number(it.precio_unitario).toLocaleString('es-CO')}</td>
+              <td style="text-align:right;">$${Number(it.subtotal).toLocaleString('es-CO')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      <div class="recibo-total">
+        TOTAL PAGADO: ${totalCOP} COP
+      </div>
+      <div class="recibo-pie">
+        <p>¡Gracias por su compra!</p>
+        <p>Documento comercial Pos emitido según normativa vigente en Colombia.</p>
+      </div>
+    `;
+
+    document.getElementById('contenido-recibo-venta').innerHTML = html;
+
+    const btnPrint = document.getElementById('btn-imprimir-recibo');
+    if (btnPrint) {
+      btnPrint.onclick = () => window.print();
+    }
+    const btnPdf = document.getElementById('btn-pdf-recibo');
+    if (btnPdf) {
+      btnPdf.onclick = () => descargarPdf(`${API}/ventas/${idVenta}/comprobante?formato=pdf`, `recibo_venta_${idVenta}.pdf`);
+    }
+
+    const modal = document.getElementById('modal-comprobante-venta');
+    modal.classList.remove('oculto');
+    modal.classList.add('activo');
+  } catch (err) {
+    alert('Error al abrir comprobante: ' + err.message);
+  }
+};
+
+// ==========================================
+// REPORTES GENERALES Y ESPECÍFICOS (30% EVALUACIÓN)
+// ==========================================
+async function cargarKPIsReportes() {
   try {
-    await descargarPdf(`${API}/reportes/caducidad?dias=60&formato=pdf`, `reporte_caducidad_${new Date().toISOString().slice(0, 10)}.pdf`);
-  } catch (err) {
-    mostrarMensaje('msg-reporte-caducidad', err.message, 'error');
-  }
-});
+    const res = await apiFetch(`${API}/reportes/resumen-general`);
+    if (!res.ok) return;
+    const data = await res.json();
 
-document.getElementById('btn-generar-movimientos').addEventListener('click', async () => {
+    const elValInv = document.getElementById('kpi-valor-inventario');
+    const elUnidadesInv = document.getElementById('kpi-unidades-inventario');
+    const elTotalVentas = document.getElementById('kpi-total-ventas');
+    const elCountVentas = document.getElementById('kpi-count-ventas');
+    const elTotalProds = document.getElementById('kpi-total-productos');
+    const elEstadoStock = document.getElementById('kpi-estado-stock');
+    const elAlertasCad = document.getElementById('kpi-alertas-caducidad');
+
+    if (elValInv) elValInv.textContent = '$' + Number(data.inventario.valor_costo_cop).toLocaleString('es-CO', { minimumFractionDigits: 2 });
+    if (elUnidadesInv) elUnidadesInv.textContent = `${data.inventario.total_unidades} unidades en stock`;
+    if (elTotalVentas) elTotalVentas.textContent = '$' + Number(data.ventas.total_recaudado_cop).toLocaleString('es-CO', { minimumFractionDigits: 2 });
+    if (elCountVentas) elCountVentas.textContent = `${data.ventas.total_ventas} ventas (${data.ventas.unidades_vendidas} unidades despachadas)`;
+    if (elTotalProds) elTotalProds.textContent = data.inventario.total_productos;
+    if (elEstadoStock) elEstadoStock.textContent = `${data.inventario.productos_agotados} agotados | ${data.inventario.productos_criticos} críticos`;
+    if (elAlertasCad) elAlertasCad.textContent = data.alertas.caducidad_proxima;
+  } catch (err) {
+    console.error('Error cargando KPIs:', err);
+  }
+}
+
+function inicializarSelectorReportes() {
+  const botones = document.querySelectorAll('.btn-subrep');
+  botones.forEach(btn => {
+    btn.addEventListener('click', () => {
+      botones.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const targetId = btn.getAttribute('data-subrep');
+      document.querySelectorAll('.subrep-panel').forEach(p => p.classList.add('oculto'));
+      const targetPanel = document.getElementById(targetId);
+      if (targetPanel) targetPanel.classList.remove('oculto');
+    });
+  });
+}
+
+async function cargarFiltrosReportes() {
+  try {
+    // Categorías en filtro inventario
+    const resCat = await apiFetch(`${API}/catalogos/categorias`);
+    const cats = await resCat.json();
+    const selCat = document.getElementById('filtro-inv-categoria');
+    if (selCat) {
+      selCat.innerHTML = '<option value="">Todas las categorías</option>' +
+        cats.map(c => `<option value="${c.id_categoria}">${c.nombre}</option>`).join('');
+    }
+
+    // Productos en filtro kardex
+    const resProd = await apiFetch(`${API}/productos`);
+    const prods = await resProd.json();
+    const selKardex = document.getElementById('filtro-kardex-producto');
+    if (selKardex) {
+      selKardex.innerHTML = '<option value="">Selecciona un producto para ver su Kardex...</option>' +
+        prods.map(p => `<option value="${p.id_producto}">${p.nombre} (${p.sku})</option>`).join('');
+    }
+
+    // Clientes en filtro ventas cliente
+    const resCli = await apiFetch(`${API}/clientes`);
+    const clis = await resCli.json();
+    const selCli = document.getElementById('filtro-cliente-rep');
+    if (selCli) {
+      selCli.innerHTML = '<option value="">Todos los clientes</option>' +
+        clis.map(c => `<option value="${c.id_cliente}">${c.nombre} (Doc: ${c.documento_identidad})</option>`).join('');
+    }
+
+    // Proveedores en filtro compras proveedor
+    const resProv = await apiFetch(`${API}/proveedores`);
+    const provs = await resProv.json();
+    const selProv = document.getElementById('filtro-prov-rep');
+    if (selProv) {
+      selProv.innerHTML = '<option value="">Todos los proveedores</option>' +
+        provs.map(pr => `<option value="${pr.id_proveedor}">${pr.nombre}</option>`).join('');
+    }
+  } catch (err) {
+    console.error('Error cargando filtros de reportes:', err);
+  }
+}
+
+// 1. Reporte: Inventario General Valorizado
+async function consultarReporteInventario() {
+  const cat = document.getElementById('filtro-inv-categoria').value;
+  const estado = document.getElementById('filtro-inv-estado').value;
+  const tbody = document.querySelector('#tabla-rep-inventario tbody');
+  const msgEl = 'msg-rep-inventario';
+
+  try {
+    const res = await apiFetch(`${API}/reportes/inventario-general?id_categoria=${cat}&estado_stock=${estado}`);
+    const data = await res.json();
+
+    if (!res.ok) {
+      mostrarMensaje(msgEl, data.error || 'Error al consultar inventario.', 'error');
+      return;
+    }
+
+    tbody.innerHTML = data.productos.map(p => `
+      <tr class="${p.estado_stock === 'AGOTADO' ? 'inactivo' : (p.estado_stock === 'CRITICO' ? 'urgente' : '')}">
+        <td><strong>${p.sku}</strong></td>
+        <td>${p.nombre}</td>
+        <td>${p.categoria}</td>
+        <td style="text-align:center;">${p.stock_actual}</td>
+        <td style="text-align:center;">${p.stock_minimo}</td>
+        <td style="text-align:right;">$${Number(p.costo_unitario_fifo).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+        <td style="text-align:right;">$${Number(p.precio_venta).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+        <td style="text-align:right;"><strong>$${Number(p.valor_total_costo).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</strong></td>
+        <td style="text-align:center;"><span class="badge ${p.estado_stock === 'NORMAL' ? 'badge-activo' : (p.estado_stock === 'CRITICO' ? 'badge-admin' : 'badge-inactivo')}">${p.estado_stock}</span></td>
+      </tr>
+    `).join('') || '<tr><td colspan="9">No se encontraron productos.</td></tr>';
+
+    document.getElementById('tot-inv-stock').innerHTML = `<strong>${data.resumen.total_unidades} un.</strong>`;
+    document.getElementById('tot-inv-valor').innerHTML = `<strong>$${Number(data.resumen.valor_total_inventario).toLocaleString('es-CO', { minimumFractionDigits: 2 })} COP</strong>`;
+    mostrarMensaje(msgEl, `Reporte generado: ${data.resumen.total_items} producto(s) encontrados.`, 'exito');
+  } catch (err) {
+    mostrarMensaje(msgEl, err.message, 'error');
+  }
+}
+
+// 2. Reporte: Kardex por Producto
+async function consultarReporteKardex() {
+  const idProd = document.getElementById('filtro-kardex-producto').value;
+  const desde = document.getElementById('filtro-kardex-desde').value;
+  const hasta = document.getElementById('filtro-kardex-hasta').value;
+  const tbody = document.querySelector('#tabla-rep-kardex tbody');
+  const infoEl = document.getElementById('kardex-info-producto');
+  const msgEl = 'msg-rep-kardex';
+
+  if (!idProd) {
+    mostrarMensaje(msgEl, 'Selecciona un producto para consultar su Kardex.', 'error');
+    return;
+  }
+
+  try {
+    let url = `${API}/reportes/kardex-producto?id_producto=${idProd}`;
+    if (desde && hasta) url += `&desde=${desde}&hasta=${hasta}`;
+
+    const res = await apiFetch(url);
+    const data = await res.json();
+
+    if (!res.ok) {
+      mostrarMensaje(msgEl, data.error || 'Error al generar Kardex.', 'error');
+      return;
+    }
+
+    const p = data.producto;
+    infoEl.innerHTML = `
+      <span>Producto: <strong>${p.nombre}</strong> (${p.sku})</span> | 
+      <span>Categoría: <strong>${p.categoria}</strong></span> | 
+      <span>Stock Actual: <strong>${p.stock_actual} unidades</strong></span> | 
+      <span>Saldo final según Kardex: <strong>${data.saldo_final} unidades</strong></span>
+    `;
+    infoEl.classList.remove('oculto');
+
+    tbody.innerHTML = data.movimientos.map(m => `
+      <tr class="${m.tipo_movimiento === 'ENTRADA' ? 'fila-entrada' : 'fila-salida'}">
+        <td>${new Date(m.fecha).toLocaleString('es-CO')}</td>
+        <td><span class="badge ${m.tipo_movimiento === 'ENTRADA' ? 'badge-activo' : 'badge-admin'}">${m.tipo_movimiento}</span></td>
+        <td>${m.referencia}</td>
+        <td>${m.tercero || '-'}</td>
+        <td style="text-align:center;">${m.cantidad > 0 ? '+' : ''}${m.cantidad}</td>
+        <td style="text-align:right;">$${Number(m.valor_unitario).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+        <td style="text-align:center;"><strong>${m.saldo_unidades} un.</strong></td>
+        <td>${m.responsable}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="8">No hay movimientos registrados para este producto.</td></tr>';
+
+    mostrarMensaje(msgEl, `Kardex generado: ${data.movimientos.length} movimiento(s) cronológicos.`, 'exito');
+  } catch (err) {
+    mostrarMensaje(msgEl, err.message, 'error');
+  }
+}
+
+// 3. Reporte: Ventas por Cliente
+async function consultarReporteVentasCliente() {
+  const idCli = document.getElementById('filtro-cliente-rep').value;
+  const desde = document.getElementById('filtro-cli-desde').value;
+  const hasta = document.getElementById('filtro-cli-hasta').value;
+  const tbody = document.querySelector('#tabla-rep-cliente tbody');
+  const msgEl = 'msg-rep-cliente';
+
+  try {
+    let url = `${API}/reportes/ventas-cliente?id_cliente=${idCli}`;
+    if (desde && hasta) url += `&desde=${desde}&hasta=${hasta}`;
+
+    const res = await apiFetch(url);
+    const data = await res.json();
+
+    if (!res.ok) {
+      mostrarMensaje(msgEl, data.error || 'Error al consultar ventas.', 'error');
+      return;
+    }
+
+    tbody.innerHTML = data.ventas.map(v => `
+      <tr>
+        <td><strong>#${v.id_venta}</strong></td>
+        <td>${new Date(v.fecha_venta).toLocaleString('es-CO')}</td>
+        <td>${v.cliente}</td>
+        <td>${v.documento}</td>
+        <td>${v.vendedor}</td>
+        <td>${v.detalle_productos}</td>
+        <td style="text-align:right;"><strong>$${Number(v.total).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</strong></td>
+      </tr>
+    `).join('') || '<tr><td colspan="7">No se encontraron ventas para este cliente.</td></tr>';
+
+    document.getElementById('tot-cliente-recaudado').innerHTML = `<strong>$${Number(data.total_recaudado).toLocaleString('es-CO', { minimumFractionDigits: 2 })} COP</strong>`;
+    mostrarMensaje(msgEl, `Reporte generado: ${data.total_ventas} venta(s) encontradas.`, 'exito');
+  } catch (err) {
+    mostrarMensaje(msgEl, err.message, 'error');
+  }
+}
+
+// 4. Reporte: Compras por Proveedor
+async function consultarReporteComprasProveedor() {
+  const idProv = document.getElementById('filtro-prov-rep').value;
+  const desde = document.getElementById('filtro-prov-desde').value;
+  const hasta = document.getElementById('filtro-prov-hasta').value;
+  const tbody = document.querySelector('#tabla-rep-proveedor tbody');
+  const msgEl = 'msg-rep-proveedor';
+
+  try {
+    let url = `${API}/reportes/compras-proveedor?id_proveedor=${idProv}`;
+    if (desde && hasta) url += `&desde=${desde}&hasta=${hasta}`;
+
+    const res = await apiFetch(url);
+    const data = await res.json();
+
+    if (!res.ok) {
+      mostrarMensaje(msgEl, data.error || 'Error al consultar compras.', 'error');
+      return;
+    }
+
+    tbody.innerHTML = data.compras.map(c => `
+      <tr>
+        <td><strong>#${c.id_compra}</strong></td>
+        <td>${new Date(c.fecha_compra).toLocaleString('es-CO')}</td>
+        <td>${c.proveedor}</td>
+        <td>${c.telefono || c.contacto || '-'}</td>
+        <td>${c.responsable}</td>
+        <td>${c.detalle_lotes}</td>
+        <td style="text-align:right;"><strong>$${Number(c.total).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</strong></td>
+      </tr>
+    `).join('') || '<tr><td colspan="7">No se encontraron compras para este proveedor.</td></tr>';
+
+    document.getElementById('tot-prov-invertido').innerHTML = `<strong>$${Number(data.total_invertido).toLocaleString('es-CO', { minimumFractionDigits: 2 })} COP</strong>`;
+    mostrarMensaje(msgEl, `Reporte generado: ${data.total_compras} orden(es) de compra.`, 'exito');
+  } catch (err) {
+    mostrarMensaje(msgEl, err.message, 'error');
+  }
+}
+
+// 5. Reporte: Caducidad
+async function consultarReporteCaducidad() {
+  const dias = document.getElementById('filtro-caducidad-dias').value || 30;
+  const tbody = document.querySelector('#tabla-reporte-caducidad tbody');
+  const msgEl = 'msg-reporte-caducidad';
+
+  try {
+    const res = await apiFetch(`${API}/reportes/caducidad?dias=${dias}`);
+    const data = await res.json();
+
+    if (!res.ok) {
+      mostrarMensaje(msgEl, data.error || 'Error al consultar caducidad.', 'error');
+      return;
+    }
+
+    tbody.innerHTML = data.map(a => `
+      <tr class="${a.estado.toLowerCase() === 'vencido' ? 'vencido' : 'urgente'}">
+        <td><strong>Lote #${a.id_detalle_compra}</strong></td>
+        <td>${a.producto}</td>
+        <td>${a.sku}</td>
+        <td style="text-align:center;">${a.cantidad_disponible}</td>
+        <td style="text-align:center;">${new Date(a.fecha_vencimiento).toLocaleDateString('es-CO')}</td>
+        <td style="text-align:center;"><strong>${textoDiasCaducidad(a)}</strong></td>
+        <td style="text-align:center;"><span class="badge ${a.estado === 'VENCIDO' ? 'badge-inactivo' : 'badge-admin'}">${a.estado}</span></td>
+      </tr>
+    `).join('') || '<tr><td colspan="7">No hay lotes próximos a vencer en el periodo seleccionado.</td></tr>';
+
+    mostrarMensaje(msgEl, `Reporte generado: ${data.length} lote(s) encontrados.`, 'exito');
+  } catch (err) {
+    mostrarMensaje(msgEl, err.message, 'error');
+  }
+}
+
+// 6. Reporte: Movimientos
+async function consultarReporteMovimientos() {
   const desde = document.getElementById('rep-desde').value;
   const hasta = document.getElementById('rep-hasta').value;
-  const tabla = document.getElementById('tabla-reporte-movimientos');
-  const btnDescargar = document.getElementById('btn-descargar-movimientos');
+  const tbody = document.querySelector('#tabla-reporte-movimientos tbody');
+  const msgEl = 'msg-reporte-movimientos';
 
   if (!desde || !hasta) {
-    mostrarMensaje('msg-reporte-movimientos', 'Selecciona la fecha de inicio y de fin.', 'error');
+    mostrarMensaje(msgEl, 'Selecciona la fecha de inicio y de fin.', 'error');
     return;
   }
 
   try {
     const res = await apiFetch(`${API}/reportes/movimientos?desde=${desde}&hasta=${hasta}`);
-    if (res.status === 404 || res.status === 400) {
-      const data = await res.json();
-      mostrarMensaje('msg-reporte-movimientos', data.error, 'error');
-      tabla.classList.add('oculto');
-      btnDescargar.classList.add('oculto');
+    const data = await res.json();
+
+    if (!res.ok) {
+      mostrarMensaje(msgEl, data.error || 'Error al generar reporte de movimientos.', 'error');
       return;
     }
-    const data = await res.json();
-    document.querySelector('#tabla-reporte-movimientos tbody').innerHTML = data.map(m => `
-      <tr>
-        <td>${m.tipo}</td><td>${new Date(m.fecha).toLocaleString()}</td><td>${m.producto}</td>
-        <td>${m.cantidad}</td><td>${m.usuario}</td><td>${m.detalle}</td>
-      </tr>`).join('');
-    tabla.classList.remove('oculto');
-    btnDescargar.classList.remove('oculto');
-    mostrarMensaje('msg-reporte-movimientos', `Reporte generado: ${data.length} movimiento(s) encontrados.`, 'exito');
-  } catch (err) {
-    mostrarMensaje('msg-reporte-movimientos', err.message, 'error');
-  }
-});
 
-document.getElementById('btn-descargar-movimientos').addEventListener('click', async () => {
-  const desde = document.getElementById('rep-desde').value;
-  const hasta = document.getElementById('rep-hasta').value;
-  try {
-    await descargarPdf(`${API}/reportes/movimientos?desde=${desde}&hasta=${hasta}&formato=pdf`, `reporte_movimientos_${desde}_a_${hasta}.pdf`);
+    tbody.innerHTML = data.map(m => `
+      <tr>
+        <td><span class="badge ${m.tipo === 'ENTRADA' ? 'badge-activo' : 'badge-admin'}">${m.tipo}</span></td>
+        <td>${new Date(m.fecha).toLocaleString('es-CO')}</td>
+        <td>${m.producto}</td>
+        <td style="text-align:center;">${m.cantidad}</td>
+        <td>${m.usuario}</td>
+        <td>${m.detalle}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="6">No se encontraron movimientos en este periodo.</td></tr>';
+
+    mostrarMensaje(msgEl, `Reporte generado: ${data.length} movimiento(s) encontrados.`, 'exito');
   } catch (err) {
-    mostrarMensaje('msg-reporte-movimientos', err.message, 'error');
+    mostrarMensaje(msgEl, err.message, 'error');
   }
-});
+}
+
+// Configuración de botones de consulta, PDF e impresión de reportes
+function configurarEventosReportes() {
+  // 1. Inventario
+  const btnInv = document.getElementById('btn-rep-inventario');
+  if (btnInv) btnInv.onclick = consultarReporteInventario;
+  const btnPdfInv = document.getElementById('btn-pdf-inventario');
+  if (btnPdfInv) {
+    btnPdfInv.onclick = () => {
+      const cat = document.getElementById('filtro-inv-categoria').value;
+      const estado = document.getElementById('filtro-inv-estado').value;
+      descargarPdf(`${API}/reportes/inventario-general?id_categoria=${cat}&estado_stock=${estado}&formato=pdf`, `inventario_general_${new Date().toISOString().slice(0, 10)}.pdf`);
+    };
+  }
+  const btnPrintInv = document.getElementById('btn-print-inventario');
+  if (btnPrintInv) btnPrintInv.onclick = () => window.print();
+
+  // 2. Kardex
+  const btnKardex = document.getElementById('btn-rep-kardex');
+  if (btnKardex) btnKardex.onclick = consultarReporteKardex;
+  const btnPdfKardex = document.getElementById('btn-pdf-kardex');
+  if (btnPdfKardex) {
+    btnPdfKardex.onclick = () => {
+      const idProd = document.getElementById('filtro-kardex-producto').value;
+      const desde = document.getElementById('filtro-kardex-desde').value;
+      const hasta = document.getElementById('filtro-kardex-hasta').value;
+      if (!idProd) return alert('Selecciona un producto primero.');
+      let url = `${API}/reportes/kardex-producto?id_producto=${idProd}&formato=pdf`;
+      if (desde && hasta) url += `&desde=${desde}&hasta=${hasta}`;
+      descargarPdf(url, `kardex_producto_${idProd}.pdf`);
+    };
+  }
+  const btnPrintKardex = document.getElementById('btn-print-kardex');
+  if (btnPrintKardex) btnPrintKardex.onclick = () => window.print();
+
+  // 3. Ventas Cliente
+  const btnCli = document.getElementById('btn-rep-cliente');
+  if (btnCli) btnCli.onclick = consultarReporteVentasCliente;
+  const btnPdfCli = document.getElementById('btn-pdf-cliente');
+  if (btnPdfCli) {
+    btnPdfCli.onclick = () => {
+      const idCli = document.getElementById('filtro-cliente-rep').value;
+      const desde = document.getElementById('filtro-cli-desde').value;
+      const hasta = document.getElementById('filtro-cli-hasta').value;
+      let url = `${API}/reportes/ventas-cliente?id_cliente=${idCli}&formato=pdf`;
+      if (desde && hasta) url += `&desde=${desde}&hasta=${hasta}`;
+      descargarPdf(url, `ventas_cliente.pdf`);
+    };
+  }
+  const btnPrintCli = document.getElementById('btn-print-cliente');
+  if (btnPrintCli) btnPrintCli.onclick = () => window.print();
+
+  // 4. Compras Proveedor
+  const btnProv = document.getElementById('btn-rep-proveedor');
+  if (btnProv) btnProv.onclick = consultarReporteComprasProveedor;
+  const btnPdfProv = document.getElementById('btn-pdf-proveedor');
+  if (btnPdfProv) {
+    btnPdfProv.onclick = () => {
+      const idProv = document.getElementById('filtro-prov-rep').value;
+      const desde = document.getElementById('filtro-prov-desde').value;
+      const hasta = document.getElementById('filtro-prov-hasta').value;
+      let url = `${API}/reportes/compras-proveedor?id_proveedor=${idProv}&formato=pdf`;
+      if (desde && hasta) url += `&desde=${desde}&hasta=${hasta}`;
+      descargarPdf(url, `compras_proveedor.pdf`);
+    };
+  }
+  const btnPrintProv = document.getElementById('btn-print-proveedor');
+  if (btnPrintProv) btnPrintProv.onclick = () => window.print();
+
+  // 5. Caducidad
+  const btnCad = document.getElementById('btn-generar-caducidad');
+  if (btnCad) btnCad.onclick = consultarReporteCaducidad;
+  const btnPdfCad = document.getElementById('btn-descargar-caducidad');
+  if (btnPdfCad) {
+    btnPdfCad.onclick = () => {
+      const dias = document.getElementById('filtro-caducidad-dias').value || 30;
+      descargarPdf(`${API}/reportes/caducidad?dias=${dias}&formato=pdf`, `reporte_caducidad_${dias}_dias.pdf`);
+    };
+  }
+  const btnPrintCad = document.getElementById('btn-print-caducidad');
+  if (btnPrintCad) btnPrintCad.onclick = () => window.print();
+
+  // 6. Movimientos
+  const btnMov = document.getElementById('btn-generar-movimientos');
+  if (btnMov) btnMov.onclick = consultarReporteMovimientos;
+  const btnPdfMov = document.getElementById('btn-descargar-movimientos');
+  if (btnPdfMov) {
+    btnPdfMov.onclick = () => {
+      const desde = document.getElementById('rep-desde').value;
+      const hasta = document.getElementById('rep-hasta').value;
+      if (!desde || !hasta) return alert('Indica fecha de inicio y fin.');
+      descargarPdf(`${API}/reportes/movimientos?desde=${desde}&hasta=${hasta}&formato=pdf`, `movimientos_${desde}_a_${hasta}.pdf`);
+    };
+  }
+  const btnPrintMov = document.getElementById('btn-print-movimientos');
+  if (btnPrintMov) btnPrintMov.onclick = () => window.print();
+}
 
 // ==========================================
 // CICLO DE VIDA Y RUTEO
@@ -1398,6 +1844,11 @@ function cargarSeccion(tab) {
     cargarRoles();
     cargarVendedores();
   }
+  if (tab === 'reportes') {
+    cargarKPIsReportes();
+    cargarFiltrosReportes();
+    consultarReporteInventario();
+  }
 }
 
 function inicializarApp() {
@@ -1405,6 +1856,8 @@ function inicializarApp() {
   cargarCategorias();
   cargarProductosSelects();
   cargarProductos();
+  inicializarSelectorReportes();
+  configurarEventosReportes();
 }
 
 window.addEventListener('hashchange', () => {

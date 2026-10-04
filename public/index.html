@@ -128,7 +128,7 @@
 
     <h2>Historial de Salidas</h2>
     <table id="tabla-ventas">
-      <thead><tr><th>Producto</th><th>Cliente</th><th>Cantidad</th><th>Concepto</th><th>Precio</th><th>Usuario</th><th>Fecha</th></tr></thead>
+      <thead><tr><th>Producto</th><th>Cliente</th><th>Cantidad</th><th>Concepto</th><th>Precio</th><th>Usuario</th><th>Fecha</th><th>Comprobante</th></tr></thead>
       <tbody></tbody>
     </table>
   </section>
@@ -205,31 +205,219 @@
   </section>
 
   <section id="tab-reportes" class="tab-content">
-    <h2>Reporte de Alertas de Caducidad</h2>
-    <div class="formulario">
-      <button id="btn-generar-caducidad">Generar reporte de caducidad</button>
-      <button id="btn-descargar-caducidad" class="oculto secundario">Descargar PDF</button>
+    <h2>Métricas Generales de Gestión</h2>
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <span class="kpi-icono">📦</span>
+        <div class="kpi-info">
+          <span class="kpi-titulo">Valor del Inventario (al costo)</span>
+          <span class="kpi-valor" id="kpi-valor-inventario">$0.00</span>
+          <span class="kpi-sub" id="kpi-unidades-inventario">0 unidades en stock</span>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-icono">💰</span>
+        <div class="kpi-info">
+          <span class="kpi-titulo">Total Recaudado en Ventas</span>
+          <span class="kpi-valor" id="kpi-total-ventas">$0.00</span>
+          <span class="kpi-sub" id="kpi-count-ventas">0 ventas registradas</span>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-icono">🏷️</span>
+        <div class="kpi-info">
+          <span class="kpi-titulo">Total Productos Activos</span>
+          <span class="kpi-valor" id="kpi-total-productos">0</span>
+          <span class="kpi-sub" id="kpi-estado-stock">0 agotados | 0 críticos</span>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-icono">⚠️</span>
+        <div class="kpi-info">
+          <span class="kpi-titulo">Alertas Próximas (30 días)</span>
+          <span class="kpi-valor" id="kpi-alertas-caducidad">0</span>
+          <span class="kpi-sub">Lotes por vencer o vencidos</span>
+        </div>
+      </div>
     </div>
-    <p id="msg-reporte-caducidad" class="mensaje"></p>
-    <table id="tabla-reporte-caducidad" class="oculto">
-      <thead><tr><th>Producto</th><th>SKU</th><th>Disponible</th><th>Vencimiento</th><th>Días restantes</th><th>Estado</th></tr></thead>
-      <tbody></tbody>
-    </table>
 
-    <h2>Reporte de Entradas y Salidas</h2>
-    <div class="formulario">
-      <label for="rep-desde" class="etiqueta-campo">Desde</label>
-      <input type="date" id="rep-desde" required>
-      <label for="rep-hasta" class="etiqueta-campo">Hasta</label>
-      <input type="date" id="rep-hasta" required>
-      <button id="btn-generar-movimientos">Generar reporte</button>
-      <button id="btn-descargar-movimientos" class="oculto secundario">Exportar PDF</button>
+    <h2>Centro de Reportes Generales y Específicos</h2>
+    <div class="selector-reportes">
+      <button type="button" class="btn-subrep active" data-subrep="rep-inventario">📊 Inventario Valorizado</button>
+      <button type="button" class="btn-subrep" data-subrep="rep-kardex">📦 Kardex por Producto</button>
+      <button type="button" class="btn-subrep" data-subrep="rep-cliente">👥 Ventas por Cliente</button>
+      <button type="button" class="btn-subrep" data-subrep="rep-proveedor">🚚 Compras por Proveedor</button>
+      <button type="button" class="btn-subrep" data-subrep="rep-caducidad">⚠️ Alertas de Caducidad</button>
+      <button type="button" class="btn-subrep" data-subrep="rep-movimientos">🔄 Entradas y Salidas</button>
     </div>
-    <p id="msg-reporte-movimientos" class="mensaje"></p>
-    <table id="tabla-reporte-movimientos" class="oculto">
-      <thead><tr><th>Tipo</th><th>Fecha</th><th>Producto</th><th>Cantidad</th><th>Usuario</th><th>Detalle</th></tr></thead>
-      <tbody></tbody>
-    </table>
+
+    <!-- 1. Reporte: Inventario General Valorizado -->
+    <div id="subrep-inventario" class="subrep-panel">
+      <div class="formulario">
+        <select id="filtro-inv-categoria">
+          <option value="">Todas las categorías</option>
+        </select>
+        <select id="filtro-inv-estado">
+          <option value="TODOS">Todos los estados de stock</option>
+          <option value="NORMAL">Normal (Disponible)</option>
+          <option value="CRITICO">Stock Crítico</option>
+          <option value="AGOTADO">Agotado (0 unidades)</option>
+        </select>
+        <button type="button" id="btn-rep-inventario">🔍 Consultar</button>
+        <button type="button" id="btn-pdf-inventario" class="secundario">📄 Exportar PDF</button>
+        <button type="button" id="btn-print-inventario" class="secundario">🖨️ Imprimir</button>
+      </div>
+      <p id="msg-rep-inventario" class="mensaje"></p>
+      <div class="area-reporte-imprimible" id="area-rep-inventario">
+        <table id="tabla-rep-inventario">
+          <thead>
+            <tr>
+              <th>SKU</th><th>Producto</th><th>Categoría</th><th>Stock</th><th>Mínimo</th><th>Costo FIFO</th><th>P. Venta</th><th>Valor Total Costo</th><th>Estado</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot>
+            <tr class="fila-total-carrito">
+              <td colspan="3" style="text-align:right;"><strong>Totales:</strong></td>
+              <td id="tot-inv-stock"><strong>0 un.</strong></td>
+              <td colspan="3"></td>
+              <td id="tot-inv-valor"><strong>$0.00</strong></td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+    <!-- 2. Reporte: Kardex por Producto -->
+    <div id="subrep-kardex" class="subrep-panel oculto">
+      <div class="formulario">
+        <select id="filtro-kardex-producto" required>
+          <option value="">Selecciona un producto para ver su Kardex...</option>
+        </select>
+        <input type="date" id="filtro-kardex-desde" title="Fecha inicio (opcional)">
+        <input type="date" id="filtro-kardex-hasta" title="Fecha fin (opcional)">
+        <button type="button" id="btn-rep-kardex">🔍 Generar Kardex</button>
+        <button type="button" id="btn-pdf-kardex" class="secundario">📄 Exportar PDF</button>
+        <button type="button" id="btn-print-kardex" class="secundario">🖨️ Imprimir</button>
+      </div>
+      <p id="msg-rep-kardex" class="mensaje"></p>
+      <div id="kardex-info-producto" class="info-precio oculto"></div>
+      <div class="area-reporte-imprimible" id="area-rep-kardex">
+        <table id="tabla-rep-kardex">
+          <thead>
+            <tr>
+              <th>Fecha</th><th>Movimiento</th><th>Referencia</th><th>Tercero</th><th>Cantidad</th><th>V. Unitario</th><th>Saldo en Unidades</th><th>Responsable</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 3. Reporte: Ventas por Cliente -->
+    <div id="subrep-cliente" class="subrep-panel oculto">
+      <div class="formulario">
+        <select id="filtro-cliente-rep">
+          <option value="">Todos los clientes</option>
+        </select>
+        <input type="date" id="filtro-cli-desde">
+        <input type="date" id="filtro-cli-hasta">
+        <button type="button" id="btn-rep-cliente">🔍 Consultar</button>
+        <button type="button" id="btn-pdf-cliente" class="secundario">📄 Exportar PDF</button>
+        <button type="button" id="btn-print-cliente" class="secundario">🖨️ Imprimir</button>
+      </div>
+      <p id="msg-rep-cliente" class="mensaje"></p>
+      <div class="area-reporte-imprimible" id="area-rep-cliente">
+        <table id="tabla-rep-cliente">
+          <thead>
+            <tr>
+              <th>Venta #</th><th>Fecha</th><th>Cliente</th><th>Documento</th><th>Vendedor</th><th>Productos</th><th>Total en COP</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot>
+            <tr class="fila-total-carrito">
+              <td colspan="6" style="text-align:right;"><strong>Total Recaudado en el periodo:</strong></td>
+              <td id="tot-cliente-recaudado"><strong>$0.00</strong></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+    <!-- 4. Reporte: Compras por Proveedor -->
+    <div id="subrep-proveedor" class="subrep-panel oculto">
+      <div class="formulario">
+        <select id="filtro-prov-rep">
+          <option value="">Todos los proveedores</option>
+        </select>
+        <input type="date" id="filtro-prov-desde">
+        <input type="date" id="filtro-prov-hasta">
+        <button type="button" id="btn-rep-proveedor">🔍 Consultar</button>
+        <button type="button" id="btn-pdf-proveedor" class="secundario">📄 Exportar PDF</button>
+        <button type="button" id="btn-print-proveedor" class="secundario">🖨️ Imprimir</button>
+      </div>
+      <p id="msg-rep-proveedor" class="mensaje"></p>
+      <div class="area-reporte-imprimible" id="area-rep-proveedor">
+        <table id="tabla-rep-proveedor">
+          <thead>
+            <tr>
+              <th>Compra #</th><th>Fecha</th><th>Proveedor</th><th>Contacto / Teléfono</th><th>Responsable</th><th>Lotes Ingresados</th><th>Inversión COP</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot>
+            <tr class="fila-total-carrito">
+              <td colspan="6" style="text-align:right;"><strong>Total Invertido en Abastecimiento:</strong></td>
+              <td id="tot-prov-invertido"><strong>$0.00</strong></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+    <!-- 5. Reporte: Alertas de Caducidad -->
+    <div id="subrep-caducidad" class="subrep-panel oculto">
+      <div class="formulario">
+        <select id="filtro-caducidad-dias">
+          <option value="15">Próximos a vencer en 15 días</option>
+          <option value="30" selected>Próximos a vencer en 30 días</option>
+          <option value="60">Próximos a vencer en 60 días</option>
+          <option value="90">Próximos a vencer en 90 días</option>
+        </select>
+        <button type="button" id="btn-generar-caducidad">🔍 Consultar</button>
+        <button type="button" id="btn-descargar-caducidad" class="secundario">📄 Exportar PDF</button>
+        <button type="button" id="btn-print-caducidad" class="secundario">🖨️ Imprimir</button>
+      </div>
+      <p id="msg-reporte-caducidad" class="mensaje"></p>
+      <div class="area-reporte-imprimible" id="area-rep-caducidad">
+        <table id="tabla-reporte-caducidad">
+          <thead><tr><th>Lote #</th><th>Producto</th><th>SKU</th><th>Disponible</th><th>Vencimiento</th><th>Días restantes</th><th>Estado</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 6. Reporte: Entradas y Salidas -->
+    <div id="subrep-movimientos" class="subrep-panel oculto">
+      <div class="formulario">
+        <label for="rep-desde" class="etiqueta-campo">Desde</label>
+        <input type="date" id="rep-desde" required>
+        <label for="rep-hasta" class="etiqueta-campo">Hasta</label>
+        <input type="date" id="rep-hasta" required>
+        <button type="button" id="btn-generar-movimientos">🔍 Consultar</button>
+        <button type="button" id="btn-descargar-movimientos" class="secundario">📄 Exportar PDF</button>
+        <button type="button" id="btn-print-movimientos" class="secundario">🖨️ Imprimir</button>
+      </div>
+      <p id="msg-reporte-movimientos" class="mensaje"></p>
+      <div class="area-reporte-imprimible" id="area-rep-movimientos">
+        <table id="tabla-reporte-movimientos">
+          <thead><tr><th>Tipo</th><th>Fecha</th><th>Producto</th><th>Cantidad</th><th>Usuario</th><th>Detalle</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
   </section>
 
 </main>
@@ -360,6 +548,22 @@
         <button type="submit">Guardar Cambios</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- Modal Comprobante de Venta (Contexto Colombiano) -->
+<div id="modal-comprobante-venta" class="modal-overlay oculto">
+  <div class="modal-contenido modal-recibo">
+    <div class="modal-encabezado no-print">
+      <h3>Comprobante de Venta Comercial</h3>
+      <button type="button" class="btn-cerrar" data-cerrar="modal-comprobante-venta">&times;</button>
+    </div>
+    <div id="contenido-recibo-venta" class="area-recibo"></div>
+    <div class="modal-acciones no-print">
+      <button type="button" id="btn-imprimir-recibo">🖨️ Imprimir</button>
+      <button type="button" id="btn-pdf-recibo" class="secundario">📄 Descargar PDF</button>
+      <button type="button" class="secundario" data-cerrar="modal-comprobante-venta">Cerrar</button>
+    </div>
   </div>
 </div>
 

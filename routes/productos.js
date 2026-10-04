@@ -8,10 +8,45 @@ router.get('/', async (req, res) => {
     const { buscar, solo_activos } = req.query;
     let sql = `SELECT p.*, c.nombre AS categoria,
               c.requiere_vencimiento,
-              (SELECT dc.costo_unitario 
+              COALESCE(
+                (SELECT dc.costo_unitario 
+                 FROM detalle_compra dc 
+                 WHERE dc.id_producto = p.id_producto AND dc.cantidad_disponible > 0
+                 ORDER BY dc.fecha_vencimiento IS NULL ASC, dc.fecha_vencimiento ASC, dc.id_detalle_compra ASC 
+                 LIMIT 1),
+                (SELECT dc.costo_unitario 
+                 FROM detalle_compra dc 
+                 WHERE dc.id_producto = p.id_producto 
+                 ORDER BY dc.id_detalle_compra ASC 
+                 LIMIT 1)
+              ) AS costo_lote_fifo,
+              (SELECT dc.id_detalle_compra 
                FROM detalle_compra dc 
-               WHERE dc.id_producto = p.id_producto 
-               ORDER BY dc.id_detalle_compra DESC LIMIT 1) AS ultimo_costo
+               WHERE dc.id_producto = p.id_producto AND dc.cantidad_disponible > 0
+               ORDER BY dc.fecha_vencimiento IS NULL ASC, dc.fecha_vencimiento ASC, dc.id_detalle_compra ASC 
+               LIMIT 1) AS id_lote_fifo,
+              (SELECT dc.cantidad_disponible 
+               FROM detalle_compra dc 
+               WHERE dc.id_producto = p.id_producto AND dc.cantidad_disponible > 0
+               ORDER BY dc.fecha_vencimiento IS NULL ASC, dc.fecha_vencimiento ASC, dc.id_detalle_compra ASC 
+               LIMIT 1) AS cant_lote_fifo,
+              (SELECT dc.fecha_vencimiento 
+               FROM detalle_compra dc 
+               WHERE dc.id_producto = p.id_producto AND dc.cantidad_disponible > 0
+               ORDER BY dc.fecha_vencimiento IS NULL ASC, dc.fecha_vencimiento ASC, dc.id_detalle_compra ASC 
+               LIMIT 1) AS vencimiento_lote_fifo,
+              COALESCE(
+                (SELECT dc.costo_unitario 
+                 FROM detalle_compra dc 
+                 WHERE dc.id_producto = p.id_producto AND dc.cantidad_disponible > 0
+                 ORDER BY dc.fecha_vencimiento IS NULL ASC, dc.fecha_vencimiento ASC, dc.id_detalle_compra ASC 
+                 LIMIT 1),
+                (SELECT dc.costo_unitario 
+                 FROM detalle_compra dc 
+                 WHERE dc.id_producto = p.id_producto 
+                 ORDER BY dc.id_detalle_compra ASC 
+                 LIMIT 1)
+              ) AS ultimo_costo
                FROM productos p 
                JOIN categorias c ON p.id_categoria = c.id_categoria
                WHERE 1=1`;

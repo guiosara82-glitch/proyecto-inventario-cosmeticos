@@ -460,4 +460,199 @@ body.oscuro .fila-total-carrito td {
   color: #e08bb4;
 }
 
+/* ==========================================
+   METRICAS / KPIS DE GESTIÓN
+   ========================================== */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 15px;
+  margin-bottom: 25px;
+}
+.kpi-card {
+  background: white;
+  padding: 16px 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  border-left: 5px solid #b85c8a;
+  transition: transform 0.2s;
+}
+.kpi-card:hover {
+  transform: translateY(-2px);
+}
+.kpi-icono {
+  font-size: 32px;
+}
+.kpi-info {
+  display: flex;
+  flex-direction: column;
+}
+.kpi-titulo {
+  font-size: 12px;
+  color: #777;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.kpi-valor {
+  font-size: 20px;
+  font-weight: bold;
+  color: #7a4f6b;
+  margin: 4px 0 2px 0;
+}
+.kpi-sub {
+  font-size: 11.5px;
+  color: #888;
+}
+body.oscuro .kpi-card {
+  background: #252329;
+  border-left-color: #e08bb4;
+}
+body.oscuro .kpi-titulo { color: #aaa; }
+body.oscuro .kpi-valor { color: #f0a0c8; }
+body.oscuro .kpi-sub { color: #888; }
+
+/* ==========================================
+   SELECTOR DE SUB-REPORTES
+   ========================================== */
+.selector-reportes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+  background: white;
+  padding: 8px;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+.btn-subrep {
+  background: transparent;
+  color: #555;
+  border: 1px solid #ddd;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+.btn-subrep:hover {
+  background: #fdf5f8;
+  color: #b85c8a;
+  border-color: #b85c8a;
+}
+.btn-subrep.active {
+  background: #b85c8a;
+  color: white;
+  border-color: #b85c8a;
+  font-weight: bold;
+}
+body.oscuro .selector-reportes {
+  background: #252329;
+}
+body.oscuro .btn-subrep {
+  color: #ccc;
+  border-color: #444;
+}
+body.oscuro .btn-subrep.active {
+  background: #b85c8a;
+  color: white;
+}
+
+/* ==========================================
+   MODAL COMPROBANTE / RECIBO (TIRILLA)
+   ========================================== */
+.modal-recibo {
+  max-width: 440px !important;
+  font-family: 'Courier New', Courier, monospace;
+}
+.area-recibo {
+  background: #fffdfa;
+  border: 1px dashed #bbb;
+  padding: 20px;
+  border-radius: 4px;
+  color: #222;
+  font-size: 12.5px;
+  margin-top: 10px;
+}
+.recibo-header {
+  text-align: center;
+  border-bottom: 1px dashed #aaa;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+}
+.recibo-header h4 {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  color: #7a4f6b;
+  font-family: 'Segoe UI', Arial, sans-serif;
+}
+.recibo-info {
+  margin-bottom: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.recibo-items {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+}
+.recibo-items th {
+  border-bottom: 1px solid #333;
+  padding: 4px 2px;
+  font-size: 11px;
+}
+.recibo-items td {
+  padding: 5px 2px;
+  border-bottom: 1px dotted #ccc;
+  font-size: 11.5px;
+}
+.recibo-total {
+  border-top: 1px dashed #aaa;
+  padding-top: 8px;
+  text-align: right;
+  font-size: 15px;
+  font-weight: bold;
+  color: #7a4f6b;
+}
+.recibo-pie {
+  text-align: center;
+  margin-top: 15px;
+  font-size: 10.5px;
+  color: #666;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .modal-overlay.activo .modal-contenido,
+  .modal-overlay.activo .modal-contenido * {
+    visibility: visible;
+  }
+  .modal-overlay.activo .modal-contenido {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    box-shadow: none;
+    border: none;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .area-reporte-imprimible,
+  .area-reporte-imprimible * {
+    visibility: visible;
+  }
+  .area-reporte-imprimible {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+}
+
 

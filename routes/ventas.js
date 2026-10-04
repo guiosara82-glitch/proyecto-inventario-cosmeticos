@@ -165,4 +165,82 @@ router.post('/', async (req, res) => {
   }
 });
 
+// Comprobante de venta (tirilla / recibo comercial - Contexto Colombiano)
+router.get('/:id/comprobante', async (req, res) => {
+  try {
+    const idVenta = req.params.id;
+    const [[venta]] = await db.query(
+      `SELECT v.id_venta, v.fecha_venta, v.total,
+              u.nombre AS vendedor, u.correo AS vendedor_correo,
+              COALESCE(c.nombre, 'Cliente General') AS cliente_nombre,
+              COALESCE(c.documento_identidad, '222222222222') AS cliente_documento,
+              COALESCE(c.contacto, 'N/A') AS cliente_telefono
+       FROM ventas v
+       JOIN usuarios u ON v.id_usuario = u.id_usuario
+       LEFT JOIN clientes c ON v.id_cliente = c.id_cliente
+       WHERE v.id_venta = ?`,
+      [idVenta]
+    );
+
+    if (!venta) {
+      return res.status(404).json({ error: 'Venta no encontrada.' });
+    }
+
+    const [items] = await db.query(
+      `SELECT dv.id_detalle_venta, p.sku, p.nombre AS producto, dv.cantidad,
+              dv.precio_unitario, (dv.cantidad * dv.precio_unitario) AS subtotal,
+              dv.concepto, dv.id_detalle_compra AS id_lote
+       FROM detalle_venta dv
+       JOIN productos p ON dv.id_producto = p.id_producto
+       WHERE dv.id_venta = ?`,
+      [idVenta]
+    );
+
+    if (req.query.formato === 'pdf') {
+      const PDFDocument = require('pdfkit');
+      const doc = new PDFDocument({ margin: 30, size: [280, 500] });
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="recibo_venta_${idVenta}.pdf"`);
+      doc.pipe(res);
+
+      doc.fontSize(12).fillColor('#7a4f6b').text('TIENDA DE COSMÉTICOS', { align: 'center' });
+      doc.fontSize(8).fillColor('#444').text('NIT: 901.458.789-1', { align: 'center' });
+      doc.text('Régimen Simplificado / Facturación Pos', { align: 'center' });
+      doc.moveDown(0.5);
+      doc.fontSize(10).fillColor('#222').text(`COMPROBANTE DE VENTA N° ${idVenta}`, { align: 'center' });
+      doc.fontSize(8).text(`Fecha: ${new Date(venta.fecha_venta).toLocaleString('es-CO')}`, { align: 'center' });
+      doc.moveDown(0.5);
+
+      doc.text('----------------------------------------------------', { align: 'center' });
+      doc.fontSize(8).text(`Cliente: ${venta.cliente_nombre}`);
+      doc.text(`Doc / Cédula: ${venta.cliente_documento}`);
+      doc.text(`Vendedor: ${venta.vendedor}`);
+      doc.text('----------------------------------------------------', { align: 'center' });
+      doc.moveDown(0.3);
+
+      items.forEach(it => {
+        doc.fontSize(8).fillColor('#000').text(`${it.producto} (x${it.cantidad})`, { bold: true });
+        doc.fillColor('#555').text(`  SKU: ${it.sku} | Unit: $${Number(it.precio_unitario).toLocaleString('es-CO')} -> $${Number(it.subtotal).toLocaleString('es-CO')}`);
+      });
+
+      doc.moveDown(0.5);
+      doc.text('----------------------------------------------------', { align: 'center' });
+      doc.fontSize(10).fillColor('#7a4f6b').text(`TOTAL A PAGAR: $${Number(venta.total).toLocaleString('es-CO', { minimumFractionDigits: 2 })} COP`, { align: 'right' });
+      doc.moveDown(0.8);
+
+      doc.fontSize(7).fillColor('#777').text('¡Gracias por su compra!', { align: 'center' });
+      doc.text('Conserve este comprobante para cualquier garantía.', { align: 'center' });
+      doc.end();
+      return;
+    }
+
+    res.json({
+      venta,
+      items
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
