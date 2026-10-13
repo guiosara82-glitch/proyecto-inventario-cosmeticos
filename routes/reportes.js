@@ -119,13 +119,15 @@ router.get('/resumen-general', async (req, res) => {
         COUNT(*) AS total_ventas,
         COALESCE(SUM(total), 0) AS total_recaudado,
         COALESCE(AVG(total), 0) AS ticket_promedio
-      FROM ventas
+      FROM ventas v
+      WHERE (v.estado IS NULL OR v.estado != 'ANULADA')
     `);
 
     const [[artsVendidos]] = await db.query(`
-      SELECT COALESCE(SUM(cantidad), 0) AS unidades_vendidas
-      FROM detalle_venta
-      WHERE concepto = 'VENTA'
+      SELECT COALESCE(SUM(dv.cantidad), 0) AS unidades_vendidas
+      FROM detalle_venta dv
+      JOIN ventas v ON dv.id_venta = v.id_venta
+      WHERE dv.concepto = 'VENTA' AND (v.estado IS NULL OR v.estado != 'ANULADA')
     `);
 
     const [[gananciasKpi]] = await db.query(`
@@ -134,8 +136,9 @@ router.get('/resumen-general', async (req, res) => {
         COALESCE(SUM(dv.cantidad * COALESCE(dc.costo_unitario, (SELECT costo_unitario FROM detalle_compra WHERE id_producto = dv.id_producto ORDER BY id_detalle_compra ASC LIMIT 1), 0)), 0) AS total_costos,
         COALESCE(SUM(dv.cantidad * (dv.precio_unitario - COALESCE(dc.costo_unitario, (SELECT costo_unitario FROM detalle_compra WHERE id_producto = dv.id_producto ORDER BY id_detalle_compra ASC LIMIT 1), 0))), 0) AS total_ganancias
       FROM detalle_venta dv
+      JOIN ventas v ON dv.id_venta = v.id_venta
       LEFT JOIN detalle_compra dc ON dv.id_detalle_compra = dc.id_detalle_compra
-      WHERE dv.concepto = 'VENTA'
+      WHERE dv.concepto = 'VENTA' AND (v.estado IS NULL OR v.estado != 'ANULADA')
     `);
 
     const [[alertas]] = await db.query(`
@@ -422,7 +425,7 @@ router.get('/ventas-cliente', async (req, res) => {
       JOIN usuarios u ON v.id_usuario = u.id_usuario
       JOIN detalle_venta dv ON v.id_venta = dv.id_venta
       JOIN productos p ON dv.id_producto = p.id_producto
-      WHERE 1=1
+      WHERE (v.estado IS NULL OR v.estado != 'ANULADA')
     `;
 
     const params = [];
@@ -706,7 +709,7 @@ router.get('/ganancias', async (req, res) => {
   try {
     const { id_producto, desde, hasta, buscar, formato } = req.query;
 
-    let whereSql = "WHERE dv.concepto = 'VENTA'";
+    let whereSql = "WHERE dv.concepto = 'VENTA' AND (v.estado IS NULL OR v.estado != 'ANULADA')";
     const params = [];
 
     if (id_producto) {

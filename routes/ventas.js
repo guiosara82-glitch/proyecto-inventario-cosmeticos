@@ -2,10 +2,28 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 
+// Asegurar existencia de columnas de anulación en la tabla ventas
+(async () => {
+  try {
+    const [cols] = await db.query("SHOW COLUMNS FROM ventas LIKE 'estado'");
+    if (cols.length === 0) {
+      await db.query("ALTER TABLE ventas ADD COLUMN estado VARCHAR(20) NOT NULL DEFAULT 'COMPLETADA'");
+      await db.query("ALTER TABLE ventas ADD COLUMN motivo_anulacion VARCHAR(255) NULL");
+      await db.query("ALTER TABLE ventas ADD COLUMN fecha_anulacion DATETIME NULL");
+      await db.query("ALTER TABLE ventas ADD COLUMN id_usuario_anulacion INT NULL");
+    }
+  } catch (e) {
+    // Si la tabla aún no existe o no tiene permisos, se continúa sin interrumpir
+  }
+})();
+
 router.get('/', async (req, res) => {
   try {
     const [rows] = await db.query(`
-      SELECT v.id_venta, v.fecha_venta, v.total, dv.cantidad, dv.precio_unitario,
+      SELECT v.id_venta, v.fecha_venta, v.total,
+             COALESCE(v.estado, 'COMPLETADA') AS estado,
+             v.motivo_anulacion, v.fecha_anulacion,
+             dv.cantidad, dv.precio_unitario,
              dv.concepto, p.nombre AS producto, u.nombre AS usuario,
              COALESCE(c.nombre, 'Cliente General') AS cliente
       FROM ventas v
@@ -240,6 +258,72 @@ router.get('/:id/comprobante', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Anulación de venta con reversión de inventario y restitución de lotes FIFO
+router.post('/:id/anular', async (req, res) => {
+  const conn = await db.getConnection();
+  try {
+    const idVenta = req.params.id;
+    const { motivo } = req.body;
+    const id_usuario = req.usuario.id_usuario;
+
+    if (!motivo || !motivo.trim()) {
+      return res.status(400).json({ error: 'Debe especificar el motivo de anulación.' });
+    }
+
+    await conn.beginTransaction();
+
+    const [[venta]] = await conn.query(
+      'SELECT id_venta, estado FROM ventas WHERE id_venta = ? FOR UPDATE',
+      [idVenta]
+    );
+
+    if (!venta) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'Venta no encontrada.' });
+    }
+
+    if (venta.estado === 'ANULADA') {
+      await conn.rollback();
+      return res.status(400).json({ error: 'Esta venta ya se encuentra anulada.' });
+    }
+
+    // 1. Obtener los ítems vendidos para restituir existencias a lotes FIFO y a stock_actual
+    const [items] = await conn.query(
+      'SELECT id_producto, id_detalle_compra, cantidad FROM detalle_venta WHERE id_venta = ?',
+      [idVenta]
+    );
+
+    for (const it of items) {
+      // Reintegrar al lote de compra de donde salió
+      if (it.id_detalle_compra) {
+        await conn.query(
+          'UPDATE detalle_compra SET cantidad_disponible = cantidad_disponible + ? WHERE id_detalle_compra = ?',
+          [it.cantidad, it.id_detalle_compra]
+        );
+      }
+      // Reintegrar al stock actual del producto
+      await conn.query(
+        'UPDATE productos SET stock_actual = stock_actual + ? WHERE id_producto = ?',
+        [it.cantidad, it.id_producto]
+      );
+    }
+
+    // 2. Marcar la venta como ANULADA con auditoría
+    await conn.query(
+      'UPDATE ventas SET estado = "ANULADA", motivo_anulacion = ?, fecha_anulacion = NOW(), id_usuario_anulacion = ? WHERE id_venta = ?',
+      [motivo.trim(), id_usuario, idVenta]
+    );
+
+    await conn.commit();
+    res.json({ mensaje: `Venta #${idVenta} anulada correctamente. Stock y lotes FIFO restituidos con éxito.` });
+  } catch (err) {
+    await conn.rollback();
+    res.status(500).json({ error: err.message });
+  } finally {
+    conn.release();
   }
 });
 

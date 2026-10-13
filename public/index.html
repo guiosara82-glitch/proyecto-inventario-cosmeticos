@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <title>Inventario de Productos Cosméticos</title>
 <link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
@@ -33,6 +34,7 @@
 <header>
   <h1>Inventario de Productos Cosméticos</h1>
   <div class="sesion">
+    <button type="button" id="btn-backup-sistema" class="btn-accion btn-editar" style="background:#28a745; color:white; border:none; padding:6px 12px; font-weight:600;" title="Descargar copia de seguridad completa (JSON)">💾 Backup BD</button>
     <span id="usuario-activo"></span>
     <button id="btn-tema" title="Cambiar tema">🌙 Oscuro</button>
     <button id="btn-logout">Cerrar sesión</button>
@@ -45,8 +47,8 @@
   <button class="tab-btn" data-tab="ventas">Salidas</button>
   <button class="tab-btn" data-tab="clientes">Clientes</button>
   <button class="tab-btn" data-tab="proveedores">Proveedores</button>
-  <button class="tab-btn" data-tab="alertas">Alertas de Caducidad</button>
-  <button class="tab-btn" data-tab="critico">Stock Crítico</button>
+  <button class="tab-btn" data-tab="alertas">Alertas <span class="badge-alerta oculto" id="badge-nav-alertas">0</span></button>
+  <button class="tab-btn" data-tab="critico">Stock Crítico <span class="badge-alerta oculto" id="badge-nav-critico">0</span></button>
   <button class="tab-btn" data-tab="vendedores">Vendedores</button>
   <button class="tab-btn" data-tab="reportes">Reportes</button>
 </nav>
@@ -128,7 +130,7 @@
 
     <h2>Historial de Salidas</h2>
     <table id="tabla-ventas">
-      <thead><tr><th>Producto</th><th>Cliente</th><th>Cantidad</th><th>Concepto</th><th>Precio</th><th>Usuario</th><th>Fecha</th><th>Comprobante</th></tr></thead>
+      <thead><tr><th>Producto</th><th>Cliente</th><th>Cantidad</th><th>Concepto</th><th>Precio</th><th>Usuario</th><th>Fecha</th><th>Estado</th><th>Acciones</th></tr></thead>
       <tbody></tbody>
     </table>
   </section>
@@ -259,6 +261,22 @@
           <span class="kpi-titulo">Utilidad / Ganancia Total</span>
           <span class="kpi-valor" id="kpi-total-ganancias" style="color: #28a745;">$0.00</span>
           <span class="kpi-sub" id="kpi-margen-promedio">Margen bruto: 0%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gráficos Interactivos de Gestión (Data Visualization) -->
+    <div class="graficos-dashboard-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.2rem; margin: 1.5rem 0;">
+      <div class="card-grafico" style="background: #ffffff; border-radius: 8px; padding: 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #ebdbe3;">
+        <h3 style="margin-top:0; font-size: 0.95rem; color: #7a4f6b; display:flex; align-items:center; gap:0.5rem;">📊 Top 5 Productos con Mayor Ganancia Neta (COP)</h3>
+        <div style="height: 240px; position: relative;">
+          <canvas id="grafico-top-ganancias"></canvas>
+        </div>
+      </div>
+      <div class="card-grafico" style="background: #ffffff; border-radius: 8px; padding: 1.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #ebdbe3;">
+        <h3 style="margin-top:0; font-size: 0.95rem; color: #7a4f6b; display:flex; align-items:center; gap:0.5rem;">💰 Balance Financiero: Ventas vs Costos vs Utilidad Neta</h3>
+        <div style="height: 240px; position: relative;">
+          <canvas id="grafico-balance-financiero"></canvas>
         </div>
       </div>
     </div>

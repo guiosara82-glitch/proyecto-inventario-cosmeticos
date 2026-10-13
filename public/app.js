@@ -113,6 +113,7 @@ function activarTab(tab, actualizarHash = true) {
   }
 
   cargarSeccion(tabFinal);
+  actualizarBadgesNavbar();
 }
 
 function mostrarLogin(mensajeError) {
@@ -1098,23 +1099,57 @@ async function cargarVentas() {
     const tbody = document.querySelector('#tabla-ventas tbody');
     if (!tbody) return;
 
-    tbody.innerHTML = data.map(v => `
-      <tr>
+    tbody.innerHTML = data.map(v => {
+      const anulada = v.estado === 'ANULADA';
+      return `
+      <tr class="${anulada ? 'venta-anulada' : ''}">
         <td>${v.producto}</td>
         <td>${v.cliente || 'Cliente General'}</td>
         <td>${v.cantidad}</td>
         <td>${v.concepto}</td>
-        <td>$${Number(v.precio_unitario).toFixed(2)}</td>
+        <td>$${Number(v.precio_unitario).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
         <td>${v.usuario}</td>
-        <td>${new Date(v.fecha_venta).toLocaleDateString()}</td>
-        <td>
-          <button type="button" class="btn-accion btn-editar" onclick="abrirComprobanteVenta(${v.id_venta})" title="Ver comprobante de venta">🧾 Recibo</button>
+        <td>${new Date(v.fecha_venta).toLocaleDateString('es-CO')}</td>
+        <td style="text-align:center;">
+          <span class="badge ${anulada ? 'badge-inactivo' : 'badge-activo'}" title="${anulada && v.motivo_anulacion ? 'Motivo: ' + v.motivo_anulacion : 'Venta completada'}">
+            ${v.estado || 'COMPLETADA'}
+          </span>
         </td>
-      </tr>`).join('') || '<tr><td colspan="8">Sin registros</td></tr>';
+        <td style="text-align:center; white-space:nowrap;">
+          <button type="button" class="btn-accion btn-editar" onclick="abrirComprobanteVenta(${v.id_venta})" title="Ver comprobante de venta">🧾 Recibo</button>
+          ${!anulada ? `<button type="button" class="btn-accion btn-anular" onclick="anularVenta(${v.id_venta})" title="Anular venta y reintegrar existencias al inventario">🚫 Anular</button>` : ''}
+        </td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="9">Sin registros de ventas</td></tr>';
   } catch (err) {
     console.error(err);
   }
 }
+
+window.anularVenta = async function(idVenta) {
+  const motivo = prompt(`¿Deseas anular la Venta #${idVenta}?\n\nEsta acción reintegrará las unidades vendidas a sus lotes de compra originales (FIFO).\n\nPor favor indica el motivo de la anulación:`);
+  if (!motivo || !motivo.trim()) return;
+
+  try {
+    const res = await apiFetch(`${API}/ventas/${idVenta}/anular`, {
+      method: 'POST',
+      body: JSON.stringify({ motivo: motivo.trim() })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      alert(data.mensaje || 'Venta anulada correctamente.');
+      cargarVentas();
+      cargarProductos();
+      cargarProductosSelects();
+      cargarKPIsReportes();
+      actualizarBadgesNavbar();
+    } else {
+      alert(data.error || 'Error al anular la venta.');
+    }
+  } catch (err) {
+    alert('Error de conexión: ' + err.message);
+  }
+};
 
 // ==========================================
 // CLIENTES (CL-007, CL-008, CL-009, CL-010)
@@ -1426,6 +1461,135 @@ window.abrirComprobanteVenta = async function(idVenta) {
 };
 
 // ==========================================
+// GRÁFICOS INTERACTIVOS (Data Visualization con Chart.js)
+// ==========================================
+let chartTopGanancias = null;
+let chartBalanceFinanciero = null;
+
+function renderGraficosDashboard(kpi, ganancias) {
+  if (typeof Chart === 'undefined') return;
+
+  // 1. Gráfico: Top 5 Productos con Mayor Ganancia
+  const ctxTop = document.getElementById('grafico-top-ganancias');
+  if (ctxTop && ganancias && Array.isArray(ganancias.productos)) {
+    const topProds = [...ganancias.productos]
+      .sort((a, b) => Number(b.ganancia_total) - Number(a.ganancia_total))
+      .slice(0, 5);
+
+    const labels = topProds.map(p => p.producto.length > 20 ? p.producto.slice(0, 18) + '...' : p.producto);
+    const dataGan = topProds.map(p => Number(p.ganancia_total));
+
+    if (chartTopGanancias) chartTopGanancias.destroy();
+
+    chartTopGanancias = new Chart(ctxTop, {
+      type: 'bar',
+      data: {
+        labels: labels.length > 0 ? labels : ['Sin ventas registradas'],
+        datasets: [{
+          label: 'Ganancia Neta (COP)',
+          data: dataGan.length > 0 ? dataGan : [0],
+          backgroundColor: '#28a745',
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => 'Ganancia: $' + Number(ctx.raw).toLocaleString('es-CO') + ' COP'
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              callback: (v) => '$' + Number(v).toLocaleString('es-CO')
+            }
+          }
+        }
+      }
+    });
+  }
+
+  // 2. Gráfico: Balance Financiero (Ventas vs Costos vs Utilidad Neta)
+  const ctxBalance = document.getElementById('grafico-balance-financiero');
+  if (ctxBalance && kpi && kpi.ganancias) {
+    const ventasTot = Number(kpi.ganancias.total_ingresos_cop || 0);
+    const costosTot = Number(kpi.ganancias.total_costos_cop || 0);
+    const ganTot = Number(kpi.ganancias.total_ganancias_cop || 0);
+
+    if (chartBalanceFinanciero) chartBalanceFinanciero.destroy();
+
+    chartBalanceFinanciero = new Chart(ctxBalance, {
+      type: 'bar',
+      data: {
+        labels: ['Ventas (Ingresos)', 'Costo Mercancía (FIFO)', 'Utilidad Neta'],
+        datasets: [{
+          data: [ventasTot, costosTot, ganTot],
+          backgroundColor: ['#7a4f6b', '#f0ad4e', '#28a745'],
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => '$' + Number(ctx.raw).toLocaleString('es-CO') + ' COP'
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              callback: (v) => '$' + Number(v).toLocaleString('es-CO')
+            }
+          }
+        }
+      }
+    });
+  }
+}
+
+// ==========================================
+// BADGES DINÁMICOS NAVBAR (Alertas y Crítico)
+// ==========================================
+async function actualizarBadgesNavbar() {
+  try {
+    const [resAlertas, resCritico] = await Promise.all([
+      apiFetch(`${API}/alertas/caducidad?dias=30`),
+      apiFetch(`${API}/productos/stock-critico`)
+    ]);
+    const alertas = await resAlertas.json();
+    const criticos = await resCritico.json();
+
+    const badgeAlertas = document.getElementById('badge-nav-alertas');
+    const badgeCritico = document.getElementById('badge-nav-critico');
+
+    if (badgeAlertas) {
+      const cantAlertas = Array.isArray(alertas) ? alertas.length : 0;
+      badgeAlertas.textContent = cantAlertas;
+      badgeAlertas.classList.toggle('oculto', cantAlertas === 0);
+    }
+
+    if (badgeCritico) {
+      const cantCriticos = Array.isArray(criticos) ? criticos.length : 0;
+      badgeCritico.textContent = cantCriticos;
+      badgeCritico.classList.toggle('oculto', cantCriticos === 0);
+    }
+  } catch (e) {
+    // Silencioso en background
+  }
+}
+
+// ==========================================
 // REPORTES GENERALES Y ESPECÍFICOS (30% EVALUACIÓN)
 // ==========================================
 async function cargarKPIsReportes() {
@@ -1455,6 +1619,16 @@ async function cargarKPIsReportes() {
     if (data.ganancias) {
       if (elTotGan) elTotGan.textContent = '$' + Number(data.ganancias.total_ganancias_cop).toLocaleString('es-CO', { minimumFractionDigits: 2 });
       if (elMargenProm) elMargenProm.textContent = `Margen bruto: ${data.ganancias.margen_porcentaje}%`;
+    }
+
+    try {
+      const resGan = await apiFetch(`${API}/reportes/ganancias`);
+      if (resGan.ok) {
+        const dataGan = await resGan.json();
+        renderGraficosDashboard(data, dataGan);
+      }
+    } catch (eG) {
+      console.warn('Error renderizando gráficos:', eG);
     }
   } catch (err) {
     console.error('Error cargando KPIs:', err);
@@ -2285,6 +2459,31 @@ function inicializarApp() {
   cargarProductos();
   inicializarSelectorReportes();
   configurarEventosReportes();
+  actualizarBadgesNavbar();
+
+  const btnBackup = document.getElementById('btn-backup-sistema');
+  if (btnBackup) {
+    btnBackup.onclick = async () => {
+      try {
+        const res = await apiFetch(`${API}/backup`);
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || 'Error al descargar la copia de seguridad.');
+        }
+        const blob = await res.blob();
+        const urlBlob = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = urlBlob;
+        a.download = `backup_inventario_cosmeticos_${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(urlBlob);
+      } catch (err) {
+        alert(err.message);
+      }
+    };
+  }
 }
 
 window.addEventListener('hashchange', () => {

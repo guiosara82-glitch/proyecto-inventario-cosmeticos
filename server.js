@@ -11,6 +11,7 @@ const ventasRoutes = require('./routes/ventas');
 const alertasRoutes = require('./routes/alertas');
 const reportesRoutes = require('./routes/reportes');
 const clientesRoutes = require('./routes/clientes');
+const backupRoutes = require('./routes/backup');
 
 const app = express();
 app.use(cors());
@@ -25,6 +26,7 @@ app.use('/api/ventas', verificarToken, ventasRoutes);
 app.use('/api/alertas', verificarToken, alertasRoutes);
 app.use('/api/reportes', verificarToken, reportesRoutes);
 app.use('/api/clientes', verificarToken, clientesRoutes);
+app.use('/api/backup', verificarToken, backupRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
