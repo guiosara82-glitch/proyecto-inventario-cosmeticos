@@ -1315,6 +1315,37 @@ async function descargarPdf(url, nombreArchivo) {
   window.URL.revokeObjectURL(urlBlob);
 }
 
+// Exportar a CSV compatible con Excel (BOM UTF-8 y delimitador ;)
+function exportarTablaACSV(nombreArchivo, columnas, filas) {
+  if (!filas || filas.length === 0) {
+    alert('No hay datos disponibles para exportar.');
+    return;
+  }
+  const encabezados = columnas.map(c => `"${(c.titulo || '').replace(/"/g, '""')}"`).join(';');
+  const lineas = filas.map(f => {
+    return columnas.map(c => {
+      let val = f[c.clave];
+      if (val instanceof Date) {
+        val = val.toLocaleDateString('es-CO');
+      } else if (val === null || val === undefined) {
+        val = '';
+      }
+      return `"${String(val).replace(/"/g, '""')}"`;
+    }).join(';');
+  });
+
+  const contenido = '\uFEFF' + encabezados + '\r\n' + lineas.join('\r\n');
+  const blob = new Blob([contenido], { type: 'text/csv;charset=utf-8;' });
+  const urlBlob = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = urlBlob;
+  a.download = nombreArchivo.endsWith('.csv') ? nombreArchivo : `${nombreArchivo}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(urlBlob);
+}
+
 // ==========================================
 // COMPROBANTE DE VENTA (Contexto Colombiano)
 // ==========================================
@@ -1418,6 +1449,13 @@ async function cargarKPIsReportes() {
     if (elTotalProds) elTotalProds.textContent = data.inventario.total_productos;
     if (elEstadoStock) elEstadoStock.textContent = `${data.inventario.productos_agotados} agotados | ${data.inventario.productos_criticos} críticos`;
     if (elAlertasCad) elAlertasCad.textContent = data.alertas.caducidad_proxima;
+
+    const elTotGan = document.getElementById('kpi-total-ganancias');
+    const elMargenProm = document.getElementById('kpi-margen-promedio');
+    if (data.ganancias) {
+      if (elTotGan) elTotGan.textContent = '$' + Number(data.ganancias.total_ganancias_cop).toLocaleString('es-CO', { minimumFractionDigits: 2 });
+      if (elMargenProm) elMargenProm.textContent = `Margen bruto: ${data.ganancias.margen_porcentaje}%`;
+    }
   } catch (err) {
     console.error('Error cargando KPIs:', err);
   }
@@ -1435,6 +1473,7 @@ function inicializarSelectorReportes() {
       if (targetPanel) {
         targetPanel.classList.remove('oculto');
         if (targetId === 'subrep-inventario') consultarReporteInventario();
+        else if (targetId === 'subrep-ganancias') consultarReporteGanancias();
         else if (targetId === 'subrep-caducidad') consultarReporteCaducidad();
         else if (targetId === 'subrep-cliente') consultarReporteVentasCliente();
         else if (targetId === 'subrep-proveedor') consultarReporteComprasProveedor();
@@ -1464,7 +1503,7 @@ async function cargarFiltrosReportes() {
       selInvEst.onchange = consultarReporteInventario;
     }
 
-    // Productos en filtro kardex
+    // Productos en filtros
     const resProd = await apiFetch(`${API}/productos`);
     const prods = await resProd.json();
     const selKardex = document.getElementById('filtro-kardex-producto');
@@ -1477,6 +1516,14 @@ async function cargarFiltrosReportes() {
       selKardex.onchange = () => {
         if (selKardex.value) consultarReporteKardex();
       };
+    }
+
+    // Selector de productos en ganancias
+    const selGanProd = document.getElementById('filtro-ganancias-prod');
+    if (selGanProd) {
+      selGanProd.innerHTML = '<option value="">Todos los productos</option>' +
+        prods.map(p => `<option value="${p.id_producto}">${p.nombre} (${p.sku})</option>`).join('');
+      selGanProd.onchange = () => consultarReporteGanancias();
     }
 
     // Clientes en filtro ventas cliente
@@ -1754,6 +1801,126 @@ async function consultarReporteMovimientos() {
   }
 }
 
+// 7. Reporte: Ganancias y Rentabilidad por Producto (PEPS/FIFO)
+let cacheReporteGanancias = { productos: [], ventas: [] };
+
+async function consultarReporteGanancias(idProdForzado = null) {
+  const selProd = document.getElementById('filtro-ganancias-prod');
+  const inputBuscar = document.getElementById('filtro-ganancias-buscar');
+  const inputDesde = document.getElementById('filtro-ganancias-desde');
+  const inputHasta = document.getElementById('filtro-ganancias-hasta');
+  const msgEl = 'msg-rep-ganancias';
+
+  if (idProdForzado !== null && selProd) {
+    selProd.value = idProdForzado;
+  }
+
+  const idProd = selProd ? selProd.value : '';
+  const buscar = inputBuscar ? inputBuscar.value.trim() : '';
+  const desde = inputDesde ? inputDesde.value : '';
+  const hasta = inputHasta ? inputHasta.value : '';
+
+  try {
+    let url = `${API}/reportes/ganancias?`;
+    const params = [];
+    if (idProd) params.push(`id_producto=${idProd}`);
+    if (buscar) params.push(`buscar=${encodeURIComponent(buscar)}`);
+    if (desde) params.push(`desde=${desde}`);
+    if (hasta) params.push(`hasta=${hasta}`);
+    url += params.join('&');
+
+    const res = await apiFetch(url);
+    const data = await res.json();
+
+    if (!res.ok) {
+      mostrarMensaje(msgEl, data.error || 'Error al consultar ganancias.', 'error');
+      return;
+    }
+
+    cacheReporteGanancias = data;
+
+    // Actualizar KPIs del reporte
+    const r = data.resumen;
+    const elVentas = document.getElementById('gan-tot-ventas');
+    const elCostos = document.getElementById('gan-tot-costos');
+    const elUtilidad = document.getElementById('gan-tot-utilidad');
+    const elMargen = document.getElementById('gan-tot-margen');
+
+    if (elVentas) elVentas.textContent = '$' + Number(r.total_ingresos).toLocaleString('es-CO', { minimumFractionDigits: 2 });
+    if (elCostos) elCostos.textContent = '$' + Number(r.total_costos).toLocaleString('es-CO', { minimumFractionDigits: 2 });
+    if (elUtilidad) elUtilidad.textContent = '$' + Number(r.total_ganancia).toLocaleString('es-CO', { minimumFractionDigits: 2 });
+    if (elMargen) elMargen.textContent = `${r.margen_global}% (${r.total_unidades} un. vendidas)`;
+
+    const tbodyProd = document.querySelector('#tabla-rep-ganancias tbody');
+    const vistaConsolidada = document.getElementById('vista-ganancias-consolidada');
+    const vistaDetalle = document.getElementById('vista-ganancias-detalle');
+
+    if (idProd) {
+      if (vistaConsolidada) vistaConsolidada.classList.add('oculto');
+      if (vistaDetalle) vistaDetalle.classList.remove('oculto');
+      const prodNom = data.productos[0]?.producto || 'Producto seleccionado';
+      renderDetalleVentasGanancias(data.ventas, prodNom);
+    } else {
+      if (vistaConsolidada) vistaConsolidada.classList.remove('oculto');
+      if (vistaDetalle) vistaDetalle.classList.add('oculto');
+
+      if (tbodyProd) {
+        tbodyProd.innerHTML = data.productos.map(p => {
+          const margen = Number(p.margen_porcentaje);
+          const badgeClase = margen >= 40 ? 'badge-activo' : (margen >= 20 ? 'badge-admin' : 'badge-inactivo');
+          return `
+            <tr>
+              <td><strong>${p.sku}</strong></td>
+              <td>${p.producto}</td>
+              <td>${p.categoria}</td>
+              <td style="text-align:center;">${p.unidades_vendidas}</td>
+              <td style="text-align:right;">$${Number(p.total_ingresos).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+              <td style="text-align:right;">$${Number(p.total_costos).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+              <td style="text-align:right; font-weight:bold; color:#28a745;">$${Number(p.ganancia_total).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+              <td style="text-align:center;"><span class="badge ${badgeClase}">${margen}%</span></td>
+              <td style="text-align:center;">
+                <button type="button" class="btn-accion btn-editar" onclick="verDetalleVentasProducto(${p.id_producto}, '${p.producto.replace(/'/g, "\\'")}')" title="Ver ventas por fecha">📅 Ver Ventas</button>
+              </td>
+            </tr>
+          `;
+        }).join('') || '<tr><td colspan="9">No se encontraron ventas de productos en este periodo o criterio.</td></tr>';
+      }
+    }
+
+    mostrarMensaje(msgEl, `Consulta completada: ${data.productos.length} producto(s) y ${data.ventas.length} venta(s) registradas (${r.periodo}).`, 'exito');
+  } catch (err) {
+    mostrarMensaje(msgEl, err.message, 'error');
+  }
+}
+
+function renderDetalleVentasGanancias(ventas, nombreProd) {
+  const tbodyDet = document.querySelector('#tabla-rep-ganancias-detalle tbody');
+  const titDet = document.getElementById('titulo-detalle-ventas');
+  if (titDet) titDet.textContent = `Historial de Ventas y Ganancias: ${nombreProd}`;
+
+  if (!tbodyDet) return;
+  tbodyDet.innerHTML = ventas.map(v => `
+    <tr>
+      <td><strong>#${v.id_venta}</strong></td>
+      <td>${new Date(v.fecha_venta).toLocaleString('es-CO')}</td>
+      <td>${v.cliente}</td>
+      <td style="text-align:center;">Lote #${v.id_lote || '-'}</td>
+      <td style="text-align:center;">${v.cantidad}</td>
+      <td style="text-align:right;">$${Number(v.precio_unitario).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+      <td style="text-align:right;">$${Number(v.costo_unitario).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+      <td style="text-align:right;">$${Number(v.subtotal_ingreso).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+      <td style="text-align:right; font-weight:bold; color:#28a745;">$${Number(v.ganancia).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+      <td style="text-align:center;"><span class="badge ${Number(v.margen_porcentaje) >= 20 ? 'badge-activo' : 'badge-inactivo'}">${v.margen_porcentaje}%</span></td>
+    </tr>
+  `).join('') || '<tr><td colspan="10">No hay ventas registradas para este producto en el periodo seleccionado.</td></tr>';
+}
+
+window.verDetalleVentasProducto = function(idProducto, nombreProd) {
+  const selProd = document.getElementById('filtro-ganancias-prod');
+  if (selProd) selProd.value = idProducto;
+  consultarReporteGanancias(idProducto);
+};
+
 // Configuración de botones de consulta, PDF e impresión de reportes
 function configurarEventosReportes() {
   // 1. Inventario
@@ -1765,6 +1932,26 @@ function configurarEventosReportes() {
       const cat = document.getElementById('filtro-inv-categoria').value;
       const estado = document.getElementById('filtro-inv-estado').value;
       descargarPdf(`${API}/reportes/inventario-general?id_categoria=${cat}&estado_stock=${estado}&formato=pdf`, `inventario_general_${new Date().toISOString().slice(0, 10)}.pdf`);
+    };
+  }
+  const btnCsvInv = document.getElementById('btn-csv-inventario');
+  if (btnCsvInv) {
+    btnCsvInv.onclick = async () => {
+      const cat = document.getElementById('filtro-inv-categoria').value;
+      const estado = document.getElementById('filtro-inv-estado').value;
+      const res = await apiFetch(`${API}/reportes/inventario-general?id_categoria=${cat}&estado_stock=${estado}`);
+      const data = await res.json();
+      exportarTablaACSV(`inventario_general_${new Date().toISOString().slice(0, 10)}.csv`, [
+        { titulo: 'SKU', clave: 'sku' },
+        { titulo: 'Producto', clave: 'nombre' },
+        { titulo: 'Categoría', clave: 'categoria' },
+        { titulo: 'Stock Actual', clave: 'stock_actual' },
+        { titulo: 'Stock Mínimo', clave: 'stock_minimo' },
+        { titulo: 'Costo Unitario FIFO', clave: 'costo_unitario_fifo' },
+        { titulo: 'Precio Venta', clave: 'precio_venta' },
+        { titulo: 'Valor Total Costo', clave: 'valor_total_costo' },
+        { titulo: 'Estado Stock', clave: 'estado_stock' }
+      ], data.productos || []);
     };
   }
   const btnPrintInv = document.getElementById('btn-print-inventario');
@@ -1785,6 +1972,29 @@ function configurarEventosReportes() {
       descargarPdf(url, `kardex_producto_${idProd}.pdf`);
     };
   }
+  const btnCsvKardex = document.getElementById('btn-csv-kardex');
+  if (btnCsvKardex) {
+    btnCsvKardex.onclick = async () => {
+      const idProd = document.getElementById('filtro-kardex-producto').value;
+      const desde = document.getElementById('filtro-kardex-desde').value;
+      const hasta = document.getElementById('filtro-kardex-hasta').value;
+      if (!idProd) return alert('Selecciona un producto primero.');
+      let url = `${API}/reportes/kardex-producto?id_producto=${idProd}`;
+      if (desde && hasta) url += `&desde=${desde}&hasta=${hasta}`;
+      const res = await apiFetch(url);
+      const data = await res.json();
+      exportarTablaACSV(`kardex_producto_${data.producto?.nombre || idProd}.csv`, [
+        { titulo: 'Fecha', clave: 'fecha' },
+        { titulo: 'Tipo Movimiento', clave: 'tipo_movimiento' },
+        { titulo: 'Referencia', clave: 'referencia' },
+        { titulo: 'Tercero', clave: 'tercero' },
+        { titulo: 'Cantidad', clave: 'cantidad' },
+        { titulo: 'Valor Unitario', clave: 'valor_unitario' },
+        { titulo: 'Saldo Unidades', clave: 'saldo_unidades' },
+        { titulo: 'Responsable', clave: 'responsable' }
+      ], data.movimientos || []);
+    };
+  }
   const btnPrintKardex = document.getElementById('btn-print-kardex');
   if (btnPrintKardex) btnPrintKardex.onclick = () => window.print();
 
@@ -1800,6 +2010,27 @@ function configurarEventosReportes() {
       let url = `${API}/reportes/ventas-cliente?id_cliente=${idCli}&formato=pdf`;
       if (desde && hasta) url += `&desde=${desde}&hasta=${hasta}`;
       descargarPdf(url, `ventas_cliente.pdf`);
+    };
+  }
+  const btnCsvCli = document.getElementById('btn-csv-cliente');
+  if (btnCsvCli) {
+    btnCsvCli.onclick = async () => {
+      const idCli = document.getElementById('filtro-cliente-rep').value;
+      const desde = document.getElementById('filtro-cli-desde').value;
+      const hasta = document.getElementById('filtro-cli-hasta').value;
+      let url = `${API}/reportes/ventas-cliente?id_cliente=${idCli}`;
+      if (desde && hasta) url += `&desde=${desde}&hasta=${hasta}`;
+      const res = await apiFetch(url);
+      const data = await res.json();
+      exportarTablaACSV('ventas_por_cliente.csv', [
+        { titulo: 'Venta #', clave: 'id_venta' },
+        { titulo: 'Fecha', clave: 'fecha_venta' },
+        { titulo: 'Cliente', clave: 'cliente' },
+        { titulo: 'Documento', clave: 'documento' },
+        { titulo: 'Vendedor', clave: 'vendedor' },
+        { titulo: 'Productos', clave: 'detalle_productos' },
+        { titulo: 'Total COP', clave: 'total' }
+      ], data.ventas || []);
     };
   }
   const btnPrintCli = document.getElementById('btn-print-cliente');
@@ -1819,6 +2050,27 @@ function configurarEventosReportes() {
       descargarPdf(url, `compras_proveedor.pdf`);
     };
   }
+  const btnCsvProv = document.getElementById('btn-csv-proveedor');
+  if (btnCsvProv) {
+    btnCsvProv.onclick = async () => {
+      const idProv = document.getElementById('filtro-prov-rep').value;
+      const desde = document.getElementById('filtro-prov-desde').value;
+      const hasta = document.getElementById('filtro-prov-hasta').value;
+      let url = `${API}/reportes/compras-proveedor?id_proveedor=${idProv}`;
+      if (desde && hasta) url += `&desde=${desde}&hasta=${hasta}`;
+      const res = await apiFetch(url);
+      const data = await res.json();
+      exportarTablaACSV('compras_por_proveedor.csv', [
+        { titulo: 'Compra #', clave: 'id_compra' },
+        { titulo: 'Fecha', clave: 'fecha_compra' },
+        { titulo: 'Proveedor', clave: 'proveedor' },
+        { titulo: 'Teléfono', clave: 'telefono' },
+        { titulo: 'Responsable', clave: 'responsable' },
+        { titulo: 'Lotes Ingresados', clave: 'detalle_lotes' },
+        { titulo: 'Inversión COP', clave: 'total' }
+      ], data.compras || []);
+    };
+  }
   const btnPrintProv = document.getElementById('btn-print-proveedor');
   if (btnPrintProv) btnPrintProv.onclick = () => window.print();
 
@@ -1836,6 +2088,27 @@ function configurarEventosReportes() {
       descargarPdf(url, `reporte_caducidad_${dias}_dias.pdf`);
     };
   }
+  const btnCsvCad = document.getElementById('btn-csv-caducidad');
+  if (btnCsvCad) {
+    btnCsvCad.onclick = async () => {
+      const dias = document.getElementById('filtro-caducidad-dias').value || 60;
+      const inputBuscar = document.getElementById('filtro-caducidad-buscar');
+      const buscar = inputBuscar ? inputBuscar.value.trim() : '';
+      let url = `${API}/reportes/caducidad?dias=${dias}`;
+      if (buscar) url += `&buscar=${encodeURIComponent(buscar)}`;
+      const res = await apiFetch(url);
+      const data = await res.json();
+      exportarTablaACSV(`alertas_caducidad_${dias}_dias.csv`, [
+        { titulo: 'Lote #', clave: 'id_detalle_compra' },
+        { titulo: 'Producto', clave: 'producto' },
+        { titulo: 'SKU', clave: 'sku' },
+        { titulo: 'Cantidad Disponible', clave: 'cantidad_disponible' },
+        { titulo: 'Fecha Vencimiento', clave: 'fecha_vencimiento' },
+        { titulo: 'Días Restantes', clave: 'dias_restantes' },
+        { titulo: 'Estado', clave: 'estado' }
+      ], data || []);
+    };
+  }
   const btnPrintCad = document.getElementById('btn-print-caducidad');
   if (btnPrintCad) btnPrintCad.onclick = () => window.print();
 
@@ -1851,8 +2124,105 @@ function configurarEventosReportes() {
       descargarPdf(`${API}/reportes/movimientos?desde=${desde}&hasta=${hasta}&formato=pdf`, `movimientos_${desde}_a_${hasta}.pdf`);
     };
   }
+  const btnCsvMov = document.getElementById('btn-csv-movimientos');
+  if (btnCsvMov) {
+    btnCsvMov.onclick = async () => {
+      const desde = document.getElementById('rep-desde').value;
+      const hasta = document.getElementById('rep-hasta').value;
+      if (!desde || !hasta) return alert('Indica fecha de inicio y fin.');
+      const res = await apiFetch(`${API}/reportes/movimientos?desde=${desde}&hasta=${hasta}`);
+      const data = await res.json();
+      exportarTablaACSV(`movimientos_${desde}_a_${hasta}.csv`, [
+        { titulo: 'Tipo', clave: 'tipo' },
+        { titulo: 'Fecha', clave: 'fecha' },
+        { titulo: 'Producto', clave: 'producto' },
+        { titulo: 'Cantidad', clave: 'cantidad' },
+        { titulo: 'Usuario', clave: 'usuario' },
+        { titulo: 'Detalle', clave: 'detalle' }
+      ], data || []);
+    };
+  }
   const btnPrintMov = document.getElementById('btn-print-movimientos');
   if (btnPrintMov) btnPrintMov.onclick = () => window.print();
+
+  // 7. Ganancias y Rentabilidad
+  const btnGan = document.getElementById('btn-rep-ganancias');
+  if (btnGan) btnGan.onclick = () => consultarReporteGanancias();
+
+  const btnPdfGan = document.getElementById('btn-pdf-ganancias');
+  if (btnPdfGan) {
+    btnPdfGan.onclick = () => {
+      const idProd = document.getElementById('filtro-ganancias-prod').value;
+      const buscar = document.getElementById('filtro-ganancias-buscar').value.trim();
+      const desde = document.getElementById('filtro-ganancias-desde').value;
+      const hasta = document.getElementById('filtro-ganancias-hasta').value;
+
+      let url = `${API}/reportes/ganancias?formato=pdf`;
+      if (idProd) url += `&id_producto=${idProd}`;
+      if (buscar) url += `&buscar=${encodeURIComponent(buscar)}`;
+      if (desde) url += `&desde=${desde}`;
+      if (hasta) url += `&hasta=${hasta}`;
+
+      descargarPdf(url, `reporte_ganancias_${new Date().toISOString().slice(0, 10)}.pdf`);
+    };
+  }
+
+  const btnCsvGan = document.getElementById('btn-csv-ganancias');
+  if (btnCsvGan) {
+    btnCsvGan.onclick = () => {
+      const selProd = document.getElementById('filtro-ganancias-prod');
+      const esDetalle = selProd && selProd.value !== '';
+      if (esDetalle) {
+        exportarTablaACSV('ganancias_detalle_ventas.csv', [
+          { titulo: 'Venta #', clave: 'id_venta' },
+          { titulo: 'Fecha', clave: 'fecha_venta' },
+          { titulo: 'Producto', clave: 'producto' },
+          { titulo: 'SKU', clave: 'sku' },
+          { titulo: 'Cliente', clave: 'cliente' },
+          { titulo: 'Vendedor', clave: 'vendedor' },
+          { titulo: 'Lote FIFO', clave: 'id_lote' },
+          { titulo: 'Cantidad', clave: 'cantidad' },
+          { titulo: 'Precio Venta Unitario', clave: 'precio_unitario' },
+          { titulo: 'Costo Lote Unitario', clave: 'costo_unitario' },
+          { titulo: 'Subtotal Venta COP', clave: 'subtotal_ingreso' },
+          { titulo: 'Subtotal Costo COP', clave: 'subtotal_costo' },
+          { titulo: 'Ganancia Neta COP', clave: 'ganancia' },
+          { titulo: 'Margen Rentabilidad %', clave: 'margen_porcentaje' }
+        ], cacheReporteGanancias.ventas);
+      } else {
+        exportarTablaACSV('rentabilidad_por_producto.csv', [
+          { titulo: 'SKU', clave: 'sku' },
+          { titulo: 'Producto', clave: 'producto' },
+          { titulo: 'Categoría', clave: 'categoria' },
+          { titulo: 'Unidades Vendidas', clave: 'unidades_vendidas' },
+          { titulo: 'Total Ventas COP', clave: 'total_ingresos' },
+          { titulo: 'Total Costos COP', clave: 'total_costos' },
+          { titulo: 'Ganancia Neta COP', clave: 'ganancia_total' },
+          { titulo: 'Margen %', clave: 'margen_porcentaje' }
+        ], cacheReporteGanancias.productos);
+      }
+    };
+  }
+
+  const btnPrintGan = document.getElementById('btn-print-ganancias');
+  if (btnPrintGan) btnPrintGan.onclick = () => window.print();
+
+  const btnVolverCons = document.getElementById('btn-volver-consolidado');
+  if (btnVolverCons) {
+    btnVolverCons.onclick = () => {
+      const selProd = document.getElementById('filtro-ganancias-prod');
+      if (selProd) selProd.value = '';
+      consultarReporteGanancias('');
+    };
+  }
+
+  const inputGanBuscar = document.getElementById('filtro-ganancias-buscar');
+  if (inputGanBuscar) {
+    inputGanBuscar.oninput = () => {
+      clearTimeout(window._timeoutGanancias);
+      window._timeoutGanancias = setTimeout(() => consultarReporteGanancias(), 300);
+    };
+  }
 
   // Filtros dinámicos de pestaña Alertas
   const selAlertasDias = document.getElementById('filtro-alertas-dias');

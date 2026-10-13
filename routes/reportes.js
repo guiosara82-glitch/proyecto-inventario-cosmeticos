@@ -128,6 +128,16 @@ router.get('/resumen-general', async (req, res) => {
       WHERE concepto = 'VENTA'
     `);
 
+    const [[gananciasKpi]] = await db.query(`
+      SELECT 
+        COALESCE(SUM(dv.cantidad * dv.precio_unitario), 0) AS total_ingresos,
+        COALESCE(SUM(dv.cantidad * COALESCE(dc.costo_unitario, (SELECT costo_unitario FROM detalle_compra WHERE id_producto = dv.id_producto ORDER BY id_detalle_compra ASC LIMIT 1), 0)), 0) AS total_costos,
+        COALESCE(SUM(dv.cantidad * (dv.precio_unitario - COALESCE(dc.costo_unitario, (SELECT costo_unitario FROM detalle_compra WHERE id_producto = dv.id_producto ORDER BY id_detalle_compra ASC LIMIT 1), 0))), 0) AS total_ganancias
+      FROM detalle_venta dv
+      LEFT JOIN detalle_compra dc ON dv.id_detalle_compra = dc.id_detalle_compra
+      WHERE dv.concepto = 'VENTA'
+    `);
+
     const [[alertas]] = await db.query(`
       SELECT 
         COUNT(*) AS total_alertas_caducidad
@@ -136,6 +146,11 @@ router.get('/resumen-general', async (req, res) => {
         AND fecha_vencimiento IS NOT NULL
         AND DATEDIFF(fecha_vencimiento, CURDATE()) <= 30
     `);
+
+    const totIng = Number(gananciasKpi.total_ingresos);
+    const totCost = Number(gananciasKpi.total_costos);
+    const totGan = Number(gananciasKpi.total_ganancias);
+    const margenGlobalKpi = totIng > 0 ? Number(((totGan / totIng) * 100).toFixed(2)) : 0;
 
     res.json({
       inventario: {
@@ -151,6 +166,12 @@ router.get('/resumen-general', async (req, res) => {
         total_recaudado_cop: Number(ventas.total_recaudado),
         ticket_promedio_cop: Number(ventas.ticket_promedio),
         unidades_vendidas: Number(artsVendidos.unidades_vendidas)
+      },
+      ganancias: {
+        total_ingresos_cop: totIng,
+        total_costos_cop: totCost,
+        total_ganancias_cop: totGan,
+        margen_porcentaje: margenGlobalKpi
       },
       alertas: {
         caducidad_proxima: Number(alertas.total_alertas_caducidad)
@@ -678,4 +699,182 @@ router.get('/movimientos', async (req, res) => {
   }
 });
 
+// ========================================================
+// 8. REPORTE DE GANANCIAS Y RENTABILIDAD POR PRODUCTO (PEPS/FIFO)
+// ========================================================
+router.get('/ganancias', async (req, res) => {
+  try {
+    const { id_producto, desde, hasta, buscar, formato } = req.query;
+
+    let whereSql = "WHERE dv.concepto = 'VENTA'";
+    const params = [];
+
+    if (id_producto) {
+      whereSql += " AND dv.id_producto = ?";
+      params.push(id_producto);
+    }
+    if (buscar) {
+      whereSql += " AND (p.nombre LIKE ? OR p.sku LIKE ?)";
+      params.push(`%${buscar}%`, `%${buscar}%`);
+    }
+    if (desde && hasta) {
+      whereSql += " AND v.fecha_venta BETWEEN ? AND ?";
+      params.push(desde + ' 00:00:00', hasta + ' 23:59:59');
+    } else if (desde) {
+      whereSql += " AND v.fecha_venta >= ?";
+      params.push(desde + ' 00:00:00');
+    } else if (hasta) {
+      whereSql += " AND v.fecha_venta <= ?";
+      params.push(hasta + ' 23:59:59');
+    }
+
+    // 1. Resumen consolidado por producto
+    const sqlProductos = `
+      SELECT 
+        p.id_producto,
+        p.sku,
+        p.nombre AS producto,
+        c.nombre AS categoria,
+        COALESCE(SUM(dv.cantidad), 0) AS unidades_vendidas,
+        COALESCE(SUM(dv.cantidad * dv.precio_unitario), 0) AS total_ingresos,
+        COALESCE(SUM(dv.cantidad * COALESCE(dc.costo_unitario, (SELECT costo_unitario FROM detalle_compra WHERE id_producto = dv.id_producto ORDER BY id_detalle_compra ASC LIMIT 1), 0)), 0) AS total_costos,
+        COALESCE(SUM(dv.cantidad * (dv.precio_unitario - COALESCE(dc.costo_unitario, (SELECT costo_unitario FROM detalle_compra WHERE id_producto = dv.id_producto ORDER BY id_detalle_compra ASC LIMIT 1), 0))), 0) AS ganancia_total,
+        CASE 
+          WHEN SUM(dv.cantidad * dv.precio_unitario) > 0 THEN 
+            ROUND((SUM(dv.cantidad * (dv.precio_unitario - COALESCE(dc.costo_unitario, (SELECT costo_unitario FROM detalle_compra WHERE id_producto = dv.id_producto ORDER BY id_detalle_compra ASC LIMIT 1), 0))) / SUM(dv.cantidad * dv.precio_unitario)) * 100, 2)
+          ELSE 0 
+        END AS margen_porcentaje
+      FROM detalle_venta dv
+      JOIN ventas v ON dv.id_venta = v.id_venta
+      JOIN productos p ON dv.id_producto = p.id_producto
+      JOIN categorias c ON p.id_categoria = c.id_categoria
+      LEFT JOIN detalle_compra dc ON dv.id_detalle_compra = dc.id_detalle_compra
+      ${whereSql}
+      GROUP BY p.id_producto, p.sku, p.nombre, c.nombre
+      ORDER BY ganancia_total DESC
+    `;
+
+    const [productos] = await db.query(sqlProductos, params);
+
+    // 2. Transacciones individuales detalladas (para consultar fecha exacta y cliente de cualquier venta)
+    const sqlDetalle = `
+      SELECT 
+        v.id_venta,
+        v.fecha_venta,
+        p.id_producto,
+        p.nombre AS producto,
+        p.sku,
+        COALESCE(cl.nombre, 'Cliente General') AS cliente,
+        u.nombre AS vendedor,
+        dv.id_detalle_compra AS id_lote,
+        dv.cantidad,
+        dv.precio_unitario,
+        COALESCE(dc.costo_unitario, (SELECT costo_unitario FROM detalle_compra WHERE id_producto = dv.id_producto ORDER BY id_detalle_compra ASC LIMIT 1), 0) AS costo_unitario,
+        (dv.cantidad * dv.precio_unitario) AS subtotal_ingreso,
+        (dv.cantidad * COALESCE(dc.costo_unitario, (SELECT costo_unitario FROM detalle_compra WHERE id_producto = dv.id_producto ORDER BY id_detalle_compra ASC LIMIT 1), 0)) AS subtotal_costo,
+        (dv.cantidad * (dv.precio_unitario - COALESCE(dc.costo_unitario, (SELECT costo_unitario FROM detalle_compra WHERE id_producto = dv.id_producto ORDER BY id_detalle_compra ASC LIMIT 1), 0))) AS ganancia,
+        CASE 
+          WHEN (dv.cantidad * dv.precio_unitario) > 0 THEN 
+            ROUND(((dv.cantidad * (dv.precio_unitario - COALESCE(dc.costo_unitario, (SELECT costo_unitario FROM detalle_compra WHERE id_producto = dv.id_producto ORDER BY id_detalle_compra ASC LIMIT 1), 0))) / (dv.cantidad * dv.precio_unitario)) * 100, 2)
+          ELSE 0 
+        END AS margen_porcentaje
+      FROM detalle_venta dv
+      JOIN ventas v ON dv.id_venta = v.id_venta
+      JOIN productos p ON dv.id_producto = p.id_producto
+      LEFT JOIN clientes cl ON v.id_cliente = cl.id_cliente
+      JOIN usuarios u ON v.id_usuario = u.id_usuario
+      LEFT JOIN detalle_compra dc ON dv.id_detalle_compra = dc.id_detalle_compra
+      ${whereSql}
+      ORDER BY v.fecha_venta DESC, v.id_venta DESC
+    `;
+
+    const [ventasDetalladas] = await db.query(sqlDetalle, params);
+
+    const totalIngresos = productos.reduce((acc, p) => acc + Number(p.total_ingresos), 0);
+    const totalCostos = productos.reduce((acc, p) => acc + Number(p.total_costos), 0);
+    const totalGanancia = totalIngresos - totalCostos;
+    const totalUnidades = productos.reduce((acc, p) => acc + Number(p.unidades_vendidas), 0);
+    const margenGlobal = totalIngresos > 0 ? Number(((totalGanancia / totalIngresos) * 100).toFixed(2)) : 0;
+
+    let rangoTexto = 'Histórico completo';
+    if (desde && hasta) rangoTexto = `Del ${desde} al ${hasta}`;
+    else if (desde) rangoTexto = `A partir del ${desde}`;
+    else if (hasta) rangoTexto = `Hasta el ${hasta}`;
+
+    if (formato === 'pdf') {
+      if (productos.length === 0) {
+        return res.status(404).json({ error: 'No hay ventas ni ganancias registradas para el criterio seleccionado.' });
+      }
+
+      if (id_producto && ventasDetalladas.length > 0) {
+        const prodNom = ventasDetalladas[0].producto;
+        return generarPdfTabla(
+          res,
+          `ganancias_${prodNom.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`,
+          `Reporte Detallado de Ganancias: ${prodNom}`,
+          `Período: ${rangoTexto} | Margen del producto: ${margenGlobal}%`,
+          [
+            { titulo: 'Venta #', clave: 'id_venta', align: 'center' },
+            { titulo: 'Fecha', clave: 'fecha_venta', align: 'left' },
+            { titulo: 'Cliente', clave: 'cliente', align: 'left' },
+            { titulo: 'Cant.', clave: 'cantidad', align: 'center' },
+            { titulo: 'P. Venta', clave: 'precio_unitario', esMoneda: true, align: 'right' },
+            { titulo: 'Costo FIFO', clave: 'costo_unitario', esMoneda: true, align: 'right' },
+            { titulo: 'Venta Total', clave: 'subtotal_ingreso', esMoneda: true, align: 'right' },
+            { titulo: 'Ganancia', clave: 'ganancia', esMoneda: true, align: 'right' },
+            { titulo: 'Margen %', clave: 'margen_porcentaje', align: 'center' }
+          ],
+          ventasDetalladas,
+          {
+            'Unidades Vendidas': totalUnidades,
+            'Total Ventas (COP)': '$' + totalIngresos.toLocaleString('es-CO', { minimumFractionDigits: 2 }),
+            'Total Costos (COP)': '$' + totalCostos.toLocaleString('es-CO', { minimumFractionDigits: 2 }),
+            'Ganancia Neta (COP)': '$' + totalGanancia.toLocaleString('es-CO', { minimumFractionDigits: 2 })
+          }
+        );
+      }
+
+      return generarPdfTabla(
+        res,
+        `reporte_ganancias_${new Date().toISOString().slice(0, 10)}.pdf`,
+        'Reporte de Rentabilidad y Ganancias por Producto (PEPS/FIFO)',
+        `Período: ${rangoTexto} | Comparativa de Ingresos vs Costo de Mercancía`,
+        [
+          { titulo: 'SKU', clave: 'sku', align: 'left' },
+          { titulo: 'Producto', clave: 'producto', align: 'left' },
+          { titulo: 'Categoría', clave: 'categoria', align: 'left' },
+          { titulo: 'Cant. Vendida', clave: 'unidades_vendidas', align: 'center' },
+          { titulo: 'Ingresos COP', clave: 'total_ingresos', esMoneda: true, align: 'right' },
+          { titulo: 'Costos COP', clave: 'total_costos', esMoneda: true, align: 'right' },
+          { titulo: 'Ganancia COP', clave: 'ganancia_total', esMoneda: true, align: 'right' },
+          { titulo: 'Margen %', clave: 'margen_porcentaje', align: 'center' }
+        ],
+        productos,
+        {
+          'Total Unidades Vendidas': totalUnidades,
+          'Ingresos Totales (COP)': '$' + totalIngresos.toLocaleString('es-CO', { minimumFractionDigits: 2 }),
+          'Costos Totales (COP)': '$' + totalCostos.toLocaleString('es-CO', { minimumFractionDigits: 2 }),
+          'Utilidad Bruta Total (COP)': '$' + totalGanancia.toLocaleString('es-CO', { minimumFractionDigits: 2 })
+        }
+      );
+    }
+
+    res.json({
+      resumen: {
+        total_ingresos: totalIngresos,
+        total_costos: totalCostos,
+        total_ganancia: totalGanancia,
+        margen_global: margenGlobal,
+        total_unidades: totalUnidades,
+        periodo: rangoTexto
+      },
+      productos,
+      ventas: ventasDetalladas
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
+

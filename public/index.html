@@ -253,11 +253,20 @@
           <span class="kpi-sub">Lotes por vencer o vencidos</span>
         </div>
       </div>
+      <div class="kpi-card" style="border-left: 4px solid #28a745;">
+        <span class="kpi-icono">📈</span>
+        <div class="kpi-info">
+          <span class="kpi-titulo">Utilidad / Ganancia Total</span>
+          <span class="kpi-valor" id="kpi-total-ganancias" style="color: #28a745;">$0.00</span>
+          <span class="kpi-sub" id="kpi-margen-promedio">Margen bruto: 0%</span>
+        </div>
+      </div>
     </div>
 
     <h2>Centro de Reportes Generales y Específicos</h2>
     <div class="selector-reportes">
       <button type="button" class="btn-subrep active" data-subrep="subrep-inventario">📊 Inventario Valorizado</button>
+      <button type="button" class="btn-subrep" data-subrep="subrep-ganancias">💰 Ganancias y Rentabilidad</button>
       <button type="button" class="btn-subrep" data-subrep="subrep-kardex">📦 Kardex por Producto</button>
       <button type="button" class="btn-subrep" data-subrep="subrep-cliente">👥 Ventas por Cliente</button>
       <button type="button" class="btn-subrep" data-subrep="subrep-proveedor">🚚 Compras por Proveedor</button>
@@ -279,6 +288,7 @@
         </select>
         <button type="button" id="btn-rep-inventario">🔍 Consultar</button>
         <button type="button" id="btn-pdf-inventario" class="secundario">📄 Exportar PDF</button>
+        <button type="button" id="btn-csv-inventario" class="secundario">📊 Exportar Excel (CSV)</button>
         <button type="button" id="btn-print-inventario" class="secundario">🖨️ Imprimir</button>
       </div>
       <p id="msg-rep-inventario" class="mensaje"></p>
@@ -313,6 +323,7 @@
         <input type="date" id="filtro-kardex-hasta" title="Fecha fin (opcional)">
         <button type="button" id="btn-rep-kardex">🔍 Generar Kardex</button>
         <button type="button" id="btn-pdf-kardex" class="secundario">📄 Exportar PDF</button>
+        <button type="button" id="btn-csv-kardex" class="secundario">📊 Exportar Excel (CSV)</button>
         <button type="button" id="btn-print-kardex" class="secundario">🖨️ Imprimir</button>
       </div>
       <p id="msg-rep-kardex" class="mensaje"></p>
@@ -339,6 +350,7 @@
         <input type="date" id="filtro-cli-hasta">
         <button type="button" id="btn-rep-cliente">🔍 Consultar</button>
         <button type="button" id="btn-pdf-cliente" class="secundario">📄 Exportar PDF</button>
+        <button type="button" id="btn-csv-cliente" class="secundario">📊 Exportar Excel (CSV)</button>
         <button type="button" id="btn-print-cliente" class="secundario">🖨️ Imprimir</button>
       </div>
       <p id="msg-rep-cliente" class="mensaje"></p>
@@ -370,6 +382,7 @@
         <input type="date" id="filtro-prov-hasta">
         <button type="button" id="btn-rep-proveedor">🔍 Consultar</button>
         <button type="button" id="btn-pdf-proveedor" class="secundario">📄 Exportar PDF</button>
+        <button type="button" id="btn-csv-proveedor" class="secundario">📊 Exportar Excel (CSV)</button>
         <button type="button" id="btn-print-proveedor" class="secundario">🖨️ Imprimir</button>
       </div>
       <p id="msg-rep-proveedor" class="mensaje"></p>
@@ -407,6 +420,7 @@
         <input type="text" id="filtro-caducidad-buscar" placeholder="🔍 Buscar por producto o SKU..." style="flex:1; min-width: 180px;">
         <button type="button" id="btn-generar-caducidad">🔍 Consultar</button>
         <button type="button" id="btn-descargar-caducidad" class="secundario">📄 Exportar PDF</button>
+        <button type="button" id="btn-csv-caducidad" class="secundario">📊 Exportar Excel (CSV)</button>
         <button type="button" id="btn-print-caducidad" class="secundario">🖨️ Imprimir</button>
       </div>
       <p id="msg-reporte-caducidad" class="mensaje"></p>
@@ -427,6 +441,7 @@
         <input type="date" id="rep-hasta" required>
         <button type="button" id="btn-generar-movimientos">🔍 Consultar</button>
         <button type="button" id="btn-descargar-movimientos" class="secundario">📄 Exportar PDF</button>
+        <button type="button" id="btn-csv-movimientos" class="secundario">📊 Exportar Excel (CSV)</button>
         <button type="button" id="btn-print-movimientos" class="secundario">🖨️ Imprimir</button>
       </div>
       <p id="msg-reporte-movimientos" class="mensaje"></p>
@@ -435,6 +450,88 @@
           <thead><tr><th>Tipo</th><th>Fecha</th><th>Producto</th><th>Cantidad</th><th>Usuario</th><th>Detalle</th></tr></thead>
           <tbody></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- 7. Reporte: Ganancias y Rentabilidad por Producto -->
+    <div id="subrep-ganancias" class="subrep-panel oculto">
+      <div class="formulario" style="align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+        <label for="filtro-ganancias-prod" class="etiqueta-campo" style="margin:0;">Producto:</label>
+        <select id="filtro-ganancias-prod" style="min-width: 200px;">
+          <option value="">Todos los productos</option>
+        </select>
+        <input type="text" id="filtro-ganancias-buscar" placeholder="🔍 Buscar por nombre o SKU..." style="flex:1; min-width: 180px;">
+        <label for="filtro-ganancias-desde" class="etiqueta-campo" style="margin:0;">Desde:</label>
+        <input type="date" id="filtro-ganancias-desde">
+        <label for="filtro-ganancias-hasta" class="etiqueta-campo" style="margin:0;">Hasta:</label>
+        <input type="date" id="filtro-ganancias-hasta">
+        <button type="button" id="btn-rep-ganancias">🔍 Consultar</button>
+        <button type="button" id="btn-pdf-ganancias" class="secundario">📄 Exportar PDF</button>
+        <button type="button" id="btn-csv-ganancias" class="secundario">📊 Exportar Excel (CSV)</button>
+        <button type="button" id="btn-print-ganancias" class="secundario">🖨️ Imprimir</button>
+      </div>
+
+      <!-- Tarjetas de resumen del periodo consultado -->
+      <div class="kpi-grid" style="margin: 1rem 0; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+        <div class="kpi-card">
+          <div class="kpi-info">
+            <span class="kpi-titulo">Ingresos Totales (Ventas)</span>
+            <span class="kpi-valor" id="gan-tot-ventas">$0.00</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-info">
+            <span class="kpi-titulo">Costo Total Mercancía (FIFO)</span>
+            <span class="kpi-valor" id="gan-tot-costos">$0.00</span>
+          </div>
+        </div>
+        <div class="kpi-card" style="border-left: 4px solid #28a745;">
+          <div class="kpi-info">
+            <span class="kpi-titulo">Ganancia Neta Obtenida</span>
+            <span class="kpi-valor" id="gan-tot-utilidad" style="color:#28a745;">$0.00</span>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-info">
+            <span class="kpi-titulo">Margen de Rentabilidad</span>
+            <span class="kpi-valor" id="gan-tot-margen">0%</span>
+          </div>
+        </div>
+      </div>
+
+      <p id="msg-rep-ganancias" class="mensaje"></p>
+
+      <div class="area-reporte-imprimible" id="area-rep-ganancias">
+        <!-- Vista consolidada por productos -->
+        <div id="vista-ganancias-consolidada">
+          <h3 style="margin-bottom:0.5rem; color:#7a4f6b;">Consolidado de Rentabilidad por Producto</h3>
+          <table id="tabla-rep-ganancias">
+            <thead>
+              <tr>
+                <th>SKU</th><th>Producto</th><th>Categoría</th><th>Cant. Vendida</th>
+                <th>Total Ventas COP</th><th>Costo Mercancía COP</th><th>Ganancia Neta COP</th><th>Margen %</th><th>Acción</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <!-- Vista detallada de ventas individuales (cuando se consulta un producto o se da clic en detalle) -->
+        <div id="vista-ganancias-detalle" class="oculto" style="margin-top: 1.5rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+            <h3 id="titulo-detalle-ventas" style="margin:0; color:#7a4f6b;">Historial de Ventas del Producto</h3>
+            <button type="button" class="btn-accion btn-cancelar" id="btn-volver-consolidado">⬅️ Volver a todos los productos</button>
+          </div>
+          <table id="tabla-rep-ganancias-detalle">
+            <thead>
+              <tr>
+                <th>Venta #</th><th>Fecha y Hora</th><th>Cliente</th><th>Lote FIFO</th><th>Cant.</th>
+                <th>P. Venta Unit.</th><th>Costo Unit. FIFO</th><th>Subtotal Venta</th><th>Ganancia Venta</th><th>Margen %</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </section>
