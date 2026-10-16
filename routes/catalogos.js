@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
+const { requireAdmin } = require('../middleware/auth');
+const { PATRON_NOMBRE_PERSONA, PATRON_CORREO } = require('../utils/validaciones');
 
 const PATRON_TEXTO = /^[A-Za-z\u00C0-\u00FF0-9\s.'-]{2,150}$/;
 const PATRON_TELEFONO = /^[0-9]{7,15}$/;
@@ -76,6 +78,36 @@ router.post('/proveedores', async (req, res) => {
   }
 });
 
+router.put('/proveedores/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, contacto, telefono, direccion } = req.body;
+    if (!nombre) {
+      return res.status(400).json({ error: 'El nombre del proveedor es obligatorio.' });
+    }
+    if (!PATRON_TEXTO.test(nombre.trim())) {
+      return res.status(400).json({ error: 'El nombre del proveedor contiene caracteres no permitidos.' });
+    }
+    if (telefono && !/^[0-9\-\s\+]{7,20}$/.test(telefono.trim())) {
+      return res.status(400).json({ error: 'El teléfono debe contener entre 7 y 20 números.' });
+    }
+
+    const [existe] = await db.query('SELECT id_proveedor FROM proveedores WHERE id_proveedor = ?', [id]);
+    if (!existe.length) {
+      return res.status(404).json({ error: 'Proveedor no encontrado.' });
+    }
+
+    await db.query(
+      'UPDATE proveedores SET nombre = ?, contacto = ?, telefono = ?, direccion = ? WHERE id_proveedor = ?',
+      [nombre.trim(), contacto ? contacto.trim() : null, telefono ? telefono.trim() : null, direccion ? direccion.trim() : null, id]
+    );
+
+    res.json({ mensaje: 'Proveedor actualizado correctamente.' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/roles', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM roles ORDER BY id_rol');
@@ -88,7 +120,7 @@ router.get('/roles', async (req, res) => {
 router.get('/usuarios', async (req, res) => {
   try {
     const { solo_activos } = req.query;
-    let sql = `SELECT u.id_usuario, u.nombre, u.correo, u.estado, u.id_rol, r.nombre AS rol
+    let sql = `SELECT u.id_usuario, u.nombre, u.correo, u.telefono, u.estado, u.id_rol, r.nombre AS rol
        FROM usuarios u
        JOIN roles r ON u.id_rol = r.id_rol`;
     const params = [];
@@ -98,6 +130,60 @@ router.get('/usuarios', async (req, res) => {
     sql += ` ORDER BY u.nombre`;
     const [rows] = await db.query(sql, params);
     res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/usuarios/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nombre, correo, telefono, id_rol, estado } = req.body;
+
+    if (!nombre || !correo || !id_rol || !estado) {
+      return res.status(400).json({ error: 'Nombre, correo, rol y estado son obligatorios.' });
+    }
+    if (!PATRON_NOMBRE_PERSONA.test(nombre.trim())) {
+      return res.status(400).json({ error: 'El nombre solo puede contener letras y espacios.' });
+    }
+    if (!PATRON_CORREO.test(correo.trim())) {
+      return res.status(400).json({ error: 'El correo debe tener un formato válido (ejemplo@dominio.com).' });
+    }
+    if (telefono && !/^[0-9]{7,15}$/.test(telefono.trim())) {
+      return res.status(400).json({ error: 'El teléfono solo puede contener entre 7 y 15 números.' });
+    }
+    if (!['ACTIVO', 'INACTIVO'].includes(estado)) {
+      return res.status(400).json({ error: 'El estado debe ser ACTIVO o INACTIVO.' });
+    }
+
+    const [usuarioExiste] = await db.query('SELECT * FROM usuarios WHERE id_usuario = ?', [id]);
+    if (!usuarioExiste.length) {
+      return res.status(404).json({ error: 'Usuario no encontrado.' });
+    }
+
+    const [correoExiste] = await db.query(
+      'SELECT id_usuario FROM usuarios WHERE LOWER(correo) = LOWER(?) AND id_usuario != ?',
+      [correo.trim(), id]
+    );
+    if (correoExiste.length > 0) {
+      return res.status(409).json({ error: 'El correo ya está registrado por otro usuario.' });
+    }
+
+    const [rolExiste] = await db.query('SELECT id_rol FROM roles WHERE id_rol = ?', [id_rol]);
+    if (!rolExiste.length) {
+      return res.status(400).json({ error: 'El rol seleccionado no es válido.' });
+    }
+
+    if (req.usuario && req.usuario.id_usuario === Number(id) && estado === 'INACTIVO') {
+      return res.status(400).json({ error: 'No puedes desactivar tu propia cuenta de administrador.' });
+    }
+
+    await db.query(
+      'UPDATE usuarios SET nombre = ?, correo = ?, telefono = ?, id_rol = ?, estado = ? WHERE id_usuario = ?',
+      [nombre.trim(), correo.trim().toLowerCase(), telefono ? telefono.trim() : null, id_rol, estado, id]
+    );
+
+    res.json({ mensaje: 'Vendedor/Usuario actualizado correctamente.' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

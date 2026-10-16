@@ -331,12 +331,16 @@ async function cargarRoles() {
     if (select) {
       select.innerHTML = data.map(r => `<option value="${r.id_rol}">${r.nombre}</option>`).join('');
     }
+    const selectEdit = document.getElementById('edit-vend-rol');
+    if (selectEdit) {
+      selectEdit.innerHTML = data.map(r => `<option value="${r.id_rol}">${r.nombre}</option>`).join('');
+    }
   } catch (err) {
     console.error(err);
   }
 }
 
-// VE-009: Mostrar rol y estado en la tabla de usuarios registrados
+// VE-009: Mostrar rol y estado en la tabla de usuarios registrados con opciones de edición
 async function cargarVendedores() {
   try {
     const res = await apiFetch(`${API}/catalogos/usuarios`);
@@ -354,12 +358,69 @@ async function cargarVendedores() {
         <td><span class="badge ${u.rol === 'Administrador' ? 'badge-admin' : 'badge-vendedor'}">${u.rol}</span></td>
         <td><span class="badge ${u.estado === 'ACTIVO' ? 'badge-activo' : 'badge-inactivo'}">${u.estado}</span></td>
         <td>
-          ${esAdmin ? `<button type="button" class="btn-accion" onclick="restablecerClaveUsuario(${u.id_usuario}, '${u.nombre.replace(/'/g, "\\'")}')">🔑 Clave</button>` : '-'}
+          ${esAdmin ? `
+            <button type="button" class="btn-accion btn-editar" onclick="abrirModalEditarVendedor(${u.id_usuario}, '${(u.nombre || '').replace(/'/g, "\\'")}', '${(u.correo || '').replace(/'/g, "\\'")}', '${(u.telefono || '').replace(/'/g, "\\'")}', ${u.id_rol}, '${u.estado}')">✏️ Editar</button>
+            <button type="button" class="btn-accion" onclick="restablecerClaveUsuario(${u.id_usuario}, '${u.nombre.replace(/'/g, "\\'")}')">🔑 Clave</button>
+          ` : '-'}
         </td>
       </tr>`).join('') || '<tr><td colspan="5">Sin usuarios registrados</td></tr>';
   } catch (err) {
     console.error(err);
   }
+}
+
+window.abrirModalEditarVendedor = function(id, nombre, correo, telefono, id_rol, estado) {
+  document.getElementById('edit-vend-id').value = id;
+  document.getElementById('edit-vend-nombre').value = nombre || '';
+  document.getElementById('edit-vend-correo').value = correo || '';
+  document.getElementById('edit-vend-telefono').value = telefono || '';
+  if (document.getElementById('edit-vend-rol')) {
+    document.getElementById('edit-vend-rol').value = id_rol;
+  }
+  if (document.getElementById('edit-vend-estado')) {
+    document.getElementById('edit-vend-estado').value = estado || 'ACTIVO';
+  }
+  document.getElementById('msg-editar-vendedor').textContent = '';
+  document.getElementById('modal-editar-vendedor').classList.remove('oculto');
+};
+
+const formEditarVendedor = document.getElementById('form-editar-vendedor');
+if (formEditarVendedor) {
+  formEditarVendedor.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('edit-vend-id').value;
+    const body = {
+      nombre: document.getElementById('edit-vend-nombre').value.trim(),
+      correo: document.getElementById('edit-vend-correo').value.trim().toLowerCase(),
+      telefono: document.getElementById('edit-vend-telefono').value.trim() || null,
+      id_rol: Number(document.getElementById('edit-vend-rol').value),
+      estado: document.getElementById('edit-vend-estado').value
+    };
+    try {
+      const res = await apiFetch(`${API}/catalogos/usuarios/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        document.getElementById('modal-editar-vendedor').classList.add('oculto');
+        mostrarMensaje('msg-registro', data.mensaje || 'Vendedor actualizado con éxito.', 'exito');
+        cargarVendedores();
+        const actual = getUsuarioActual();
+        if (actual && actual.id_usuario === Number(id)) {
+          actual.nombre = body.nombre;
+          actual.correo = body.correo;
+          localStorage.setItem('usuario', JSON.stringify(actual));
+          const elUser = document.getElementById('usuario-activo');
+          if (elUser) elUser.textContent = `Hola, ${body.nombre}`;
+        }
+      } else {
+        mostrarMensaje('msg-editar-vendedor', data.error || 'Error al actualizar vendedor.', 'error');
+      }
+    } catch (err) {
+      mostrarMensaje('msg-editar-vendedor', err.message, 'error');
+    }
+  });
 }
 
 window.restablecerClaveUsuario = async function(id_usuario, nombre) {
@@ -472,7 +533,50 @@ function cargarProveedoresTabla(proveedores) {
       <td>${p.contacto || '-'}</td>
       <td>${p.telefono || '-'}</td>
       <td>${p.direccion || '-'}</td>
-    </tr>`).join('') || '<tr><td colspan="4">Sin proveedores registrados</td></tr>';
+      <td>
+        <button type="button" class="btn-accion btn-editar" onclick="abrirModalEditarProveedor(${p.id_proveedor}, '${(p.nombre || '').replace(/'/g, "\\'")}', '${(p.contacto || '').replace(/'/g, "\\'")}', '${(p.telefono || '').replace(/'/g, "\\'")}', '${(p.direccion || '').replace(/'/g, "\\'")}')">✏️ Editar</button>
+      </td>
+    </tr>`).join('') || '<tr><td colspan="5">Sin proveedores registrados</td></tr>';
+}
+
+window.abrirModalEditarProveedor = function(id, nombre, contacto, telefono, direccion) {
+  document.getElementById('edit-prov-id').value = id;
+  document.getElementById('edit-prov-nombre').value = nombre || '';
+  document.getElementById('edit-prov-contacto').value = contacto || '';
+  document.getElementById('edit-prov-telefono').value = telefono || '';
+  document.getElementById('edit-prov-direccion').value = direccion || '';
+  document.getElementById('msg-editar-proveedor').textContent = '';
+  document.getElementById('modal-editar-proveedor').classList.remove('oculto');
+};
+
+const formEditarProveedor = document.getElementById('form-editar-proveedor');
+if (formEditarProveedor) {
+  formEditarProveedor.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('edit-prov-id').value;
+    const body = {
+      nombre: document.getElementById('edit-prov-nombre').value.trim(),
+      contacto: document.getElementById('edit-prov-contacto').value.trim() || null,
+      telefono: document.getElementById('edit-prov-telefono').value.trim() || null,
+      direccion: document.getElementById('edit-prov-direccion').value.trim() || null
+    };
+    try {
+      const res = await apiFetch(`${API}/catalogos/proveedores/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        document.getElementById('modal-editar-proveedor').classList.add('oculto');
+        mostrarMensaje('msg-proveedor-tab', data.mensaje || 'Proveedor actualizado con éxito.', 'exito');
+        cargarProveedores();
+      } else {
+        mostrarMensaje('msg-editar-proveedor', data.error || 'Error al actualizar proveedor.', 'error');
+      }
+    } catch (err) {
+      mostrarMensaje('msg-editar-proveedor', err.message, 'error');
+    }
+  });
 }
 
 // EN-010: Modal de nuevo proveedor rápido desde compras
