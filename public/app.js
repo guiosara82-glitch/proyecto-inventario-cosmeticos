@@ -685,6 +685,9 @@ function actualizarInfoCompra() {
 
   const precioVenta = parseFloat(prod.precio) || 0;
   const costo = parseFloat(inputCosto.value);
+  const inputCantC = document.getElementById('c-cantidad');
+  const cantC = parseInt(inputCantC?.value, 10);
+  const cantMultiplicarC = (!isNaN(cantC) && cantC > 0) ? cantC : 1;
   let html = `<span>Precio de venta al público en catálogo: <strong>$${precioVenta.toFixed(2)}</strong></span>`;
 
   if (!isNaN(costo) && costo > 0) {
@@ -694,8 +697,10 @@ function actualizarInfoCompra() {
     } else {
       inputCosto.classList.remove('campo-invalido');
       const ganancia = precioVenta - costo;
+      const gananciaTotal = ganancia * cantMultiplicarC;
       const margenPct = ((ganancia / costo) * 100).toFixed(1);
-      html += `<br><span class="ganancia-positiva">✅ Margen proyectado: $${ganancia.toFixed(2)} (${margenPct}%) por unidad</span>`;
+      html += `<br><span class="ganancia-positiva">✅ Margen unitario proyectado: $${ganancia.toFixed(2)} (${margenPct}%)</span>`;
+      html += ` | <span class="ganancia-positiva" style="font-weight:bold;">💰 Ganancia proyectada total: $${gananciaTotal.toFixed(2)} (${cantMultiplicarC} un. × $${ganancia.toFixed(2)})</span>`;
     }
   } else {
     inputCosto.classList.remove('campo-invalido');
@@ -708,6 +713,7 @@ function actualizarInfoCompra() {
 function actualizarInfoVenta(autollenar = false) {
   const selectProd = document.getElementById('v-producto');
   const inputPrecio = document.getElementById('v-precio');
+  const inputCantidad = document.getElementById('v-cantidad');
   const selectConcepto = document.getElementById('v-concepto');
   const infoEl = document.getElementById('info-precio-venta');
   if (!infoEl || !selectProd || !inputPrecio) return;
@@ -735,6 +741,9 @@ function actualizarInfoVenta(autollenar = false) {
   }
 
   const precioVenta = parseFloat(inputPrecio.value);
+  const cantV = parseInt(inputCantidad?.value, 10);
+  const cantMultiplicarV = (!isNaN(cantV) && cantV > 0) ? cantV : 1;
+
   const costoRef = (prod.costo_lote_fifo !== null && prod.costo_lote_fifo !== undefined)
     ? parseFloat(prod.costo_lote_fifo)
     : ((prod.ultimo_costo !== null && prod.ultimo_costo !== undefined) ? parseFloat(prod.ultimo_costo) : null);
@@ -763,9 +772,12 @@ function actualizarInfoVenta(autollenar = false) {
       html += `<br><span class="ganancia-negativa">⚠️ El precio ($${precioVenta.toFixed(2)}) es menor o igual al costo del lote FIFO ($${costoRef.toFixed(2)}). Debes venderlo a mayor precio para obtener ganancia.</span>`;
     } else if (costoRef !== null) {
       inputPrecio.classList.remove('campo-invalido');
-      const ganancia = precioVenta - costoRef;
-      const margenPct = ((ganancia / costoRef) * 100).toFixed(1);
-      html += `<br><span class="ganancia-positiva">✅ Ganancia estimada sobre lote FIFO: $${ganancia.toFixed(2)} (${margenPct}%) por unidad vendida</span>`;
+      const gananciaUnitaria = precioVenta - costoRef;
+      const gananciaTotal = gananciaUnitaria * cantMultiplicarV;
+      const margenPct = ((gananciaUnitaria / costoRef) * 100).toFixed(1);
+
+      html += `<br><span class="ganancia-positiva">✅ <strong>Ganancia unitaria:</strong> $${gananciaUnitaria.toFixed(2)} (${margenPct}%)</span>`;
+      html += ` | <span class="ganancia-positiva" style="font-weight:bold; font-size:1.05em;">💰 <strong>Ganancia obtenida (multiplicación):</strong> $${gananciaTotal.toFixed(2)} (${cantMultiplicarV} un. × $${gananciaUnitaria.toFixed(2)})</span>`;
     } else {
       inputPrecio.classList.remove('campo-invalido');
     }
@@ -816,11 +828,15 @@ if (cProdEl) cProdEl.addEventListener('change', () => {
 });
 const cCostoEl = document.getElementById('c-costo');
 if (cCostoEl) cCostoEl.addEventListener('input', actualizarInfoCompra);
+const cCantidadEl = document.getElementById('c-cantidad');
+if (cCantidadEl) cCantidadEl.addEventListener('input', actualizarInfoCompra);
 
 const vProdEl = document.getElementById('v-producto');
 if (vProdEl) vProdEl.addEventListener('change', () => actualizarInfoVenta(true));
 const vPrecioEl = document.getElementById('v-precio');
 if (vPrecioEl) vPrecioEl.addEventListener('input', () => actualizarInfoVenta(false));
+const vCantidadEl = document.getElementById('v-cantidad');
+if (vCantidadEl) vCantidadEl.addEventListener('input', () => actualizarInfoVenta(false));
 const vConceptoEl = document.getElementById('v-concepto');
 if (vConceptoEl) vConceptoEl.addEventListener('change', () => actualizarInfoVenta(false));
 
@@ -2127,6 +2143,8 @@ async function consultarReporteGanancias(idProdForzado = null) {
     if (elVentas) elVentas.textContent = '$' + Number(r.total_ingresos).toLocaleString('es-CO', { minimumFractionDigits: 2 });
     if (elCostos) elCostos.textContent = '$' + Number(r.total_costos).toLocaleString('es-CO', { minimumFractionDigits: 2 });
     if (elUtilidad) elUtilidad.textContent = '$' + Number(r.total_ganancia).toLocaleString('es-CO', { minimumFractionDigits: 2 });
+    const elUtilidadSub = document.getElementById('gan-tot-utilidad-sub');
+    if (elUtilidadSub) elUtilidadSub.textContent = `Sumatoria: ${r.total_unidades} un. vendidas × margen`;
     if (elMargen) elMargen.textContent = `${r.margen_global}% (${r.total_unidades} un. vendidas)`;
 
     const tbodyProd = document.querySelector('#tabla-rep-ganancias tbody');
@@ -2146,6 +2164,9 @@ async function consultarReporteGanancias(idProdForzado = null) {
         tbodyProd.innerHTML = data.productos.map(p => {
           const margen = Number(p.margen_porcentaje);
           const badgeClase = margen >= 40 ? 'badge-activo' : (margen >= 20 ? 'badge-admin' : 'badge-inactivo');
+          const gananciaUnit = (Number(p.unidades_vendidas) > 0)
+            ? (Number(p.ganancia_total) / Number(p.unidades_vendidas))
+            : 0;
           return `
             <tr>
               <td><strong>${p.sku}</strong></td>
@@ -2154,7 +2175,12 @@ async function consultarReporteGanancias(idProdForzado = null) {
               <td style="text-align:center;">${p.unidades_vendidas}</td>
               <td style="text-align:right;">$${Number(p.total_ingresos).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
               <td style="text-align:right;">$${Number(p.total_costos).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
-              <td style="text-align:right; font-weight:bold; color:#28a745;">$${Number(p.ganancia_total).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+              <td style="text-align:right; font-weight:bold; color:#28a745;">
+                $${Number(p.ganancia_total).toLocaleString('es-CO', { minimumFractionDigits: 2 })}
+                <div style="font-size:11px; color:#666; font-weight:normal; margin-top:2px;" title="Multiplicación de unidades por margen unitario">
+                  (${p.unidades_vendidas} un. × $${gananciaUnit.toLocaleString('es-CO', { minimumFractionDigits: 2 })})
+                </div>
+              </td>
               <td style="text-align:center;"><span class="badge ${badgeClase}">${margen}%</span></td>
               <td style="text-align:center;">
                 <button type="button" class="btn-accion btn-editar" onclick="verDetalleVentasProducto(${p.id_producto}, '${p.producto.replace(/'/g, "\\'")}')" title="Ver ventas por fecha">📅 Ver Ventas</button>
@@ -2177,7 +2203,9 @@ function renderDetalleVentasGanancias(ventas, nombreProd) {
   if (titDet) titDet.textContent = `Historial de Ventas y Ganancias: ${nombreProd}`;
 
   if (!tbodyDet) return;
-  tbodyDet.innerHTML = ventas.map(v => `
+  tbodyDet.innerHTML = ventas.map(v => {
+    const gananciaUnit = Number(v.precio_unitario) - Number(v.costo_unitario);
+    return `
     <tr>
       <td><strong>#${v.id_venta}</strong></td>
       <td>${new Date(v.fecha_venta).toLocaleString('es-CO')}</td>
@@ -2187,10 +2215,16 @@ function renderDetalleVentasGanancias(ventas, nombreProd) {
       <td style="text-align:right;">$${Number(v.precio_unitario).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
       <td style="text-align:right;">$${Number(v.costo_unitario).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
       <td style="text-align:right;">$${Number(v.subtotal_ingreso).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
-      <td style="text-align:right; font-weight:bold; color:#28a745;">$${Number(v.ganancia).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+      <td style="text-align:right; font-weight:bold; color:#28a745;">
+        $${Number(v.ganancia).toLocaleString('es-CO', { minimumFractionDigits: 2 })}
+        <div style="font-size:11px; color:#666; font-weight:normal; margin-top:2px;" title="Multiplicación de unidades por margen unitario de la venta">
+          (${v.cantidad} un. × $${gananciaUnit.toLocaleString('es-CO', { minimumFractionDigits: 2 })})
+        </div>
+      </td>
       <td style="text-align:center;"><span class="badge ${Number(v.margen_porcentaje) >= 20 ? 'badge-activo' : 'badge-inactivo'}">${v.margen_porcentaje}%</span></td>
     </tr>
-  `).join('') || '<tr><td colspan="10">No hay ventas registradas para este producto en el periodo seleccionado.</td></tr>';
+  `;
+  }).join('') || '<tr><td colspan="10">No hay ventas registradas para este producto en el periodo seleccionado.</td></tr>';
 }
 
 window.verDetalleVentasProducto = function(idProducto, nombreProd) {
