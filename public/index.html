@@ -86,7 +86,10 @@
         <select id="c-proveedor" required></select>
         <button type="button" id="btn-modal-nuevo-proveedor" class="btn-accion-mini" title="Registrar nuevo proveedor">+ Nuevo</button>
       </div>
-      <select id="c-producto" required></select>
+      <div class="grupo-buscador-select">
+        <input type="text" id="c-buscar-producto" placeholder="🔍 Buscar producto (nombre o SKU)..." autocomplete="off">
+        <select id="c-producto" required></select>
+      </div>
       <input type="number" id="c-cantidad" placeholder="Cantidad" min="1" required>
       <input type="number" id="c-costo" placeholder="Costo unitario" step="0.01" min="0.01" required>
       <div id="info-costo-compra" class="info-precio oculto"></div>
@@ -99,6 +102,7 @@
     <p id="msg-compra" class="mensaje"></p>
 
     <h2>Historial de Entradas</h2>
+    <input type="text" id="buscar-compra" placeholder="🔍 Buscar entrada por producto o proveedor...">
     <table id="tabla-compras">
       <thead><tr><th>Producto</th><th>Proveedor</th><th>Cantidad</th><th>Disponible</th><th>Costo</th><th>Vencimiento</th><th>Fecha</th></tr></thead>
       <tbody></tbody>
@@ -109,7 +113,10 @@
     <h2>Registrar Salida / Venta</h2>
     <form id="form-venta" class="formulario">
       <select id="v-cliente"></select>
-      <select id="v-producto" required></select>
+      <div class="grupo-buscador-select">
+        <input type="text" id="v-buscar-producto" placeholder="🔍 Buscar producto (nombre o SKU)..." autocomplete="off">
+        <select id="v-producto" required></select>
+      </div>
       <input type="number" id="v-cantidad" placeholder="Cantidad" min="1" required>
       <input type="number" id="v-precio" placeholder="Precio unitario" step="0.01" min="0">
       <select id="v-concepto">
@@ -164,6 +171,7 @@
     </form>
     <p id="msg-proveedor-tab" class="mensaje"></p>
     <h2>Proveedores registrados</h2>
+    <input type="text" id="buscar-proveedor" placeholder="🔍 Buscar proveedor por nombre, contacto, teléfono o dirección...">
     <table id="tabla-proveedores">
       <thead><tr><th>Nombre</th><th>Contacto</th><th>Teléfono</th><th>Dirección</th><th>Acciones</th></tr></thead>
       <tbody></tbody>

@@ -508,20 +508,45 @@ if (formNuevaCat) {
 // ==========================================
 // PROVEEDORES (EN-010)
 // ==========================================
+let listaProveedoresCache = [];
+
 async function cargarProveedores() {
   try {
     const res = await apiFetch(`${API}/catalogos/proveedores`);
     const data = await res.json();
+    listaProveedoresCache = Array.isArray(data) ? data : [];
     const select = document.getElementById('c-proveedor');
     if (select) {
       select.innerHTML =
         '<option value="">Seleccione proveedor</option>' +
-        data.map(p => `<option value="${p.id_proveedor}">${p.nombre}</option>`).join('');
+        listaProveedoresCache.map(p => `<option value="${p.id_proveedor}">${p.nombre}</option>`).join('');
     }
-    cargarProveedoresTabla(data);
+    const inputBuscar = document.getElementById('buscar-proveedor');
+    const q = inputBuscar ? inputBuscar.value.toLowerCase().trim() : '';
+    filtrarProveedores(q);
   } catch (err) {
     console.error(err);
   }
+}
+
+function filtrarProveedores(q = '') {
+  let list = listaProveedoresCache;
+  if (q) {
+    list = list.filter(p => 
+      (p.nombre && p.nombre.toLowerCase().includes(q)) ||
+      (p.contacto && p.contacto.toLowerCase().includes(q)) ||
+      (p.telefono && p.telefono.toLowerCase().includes(q)) ||
+      (p.direccion && p.direccion.toLowerCase().includes(q))
+    );
+  }
+  cargarProveedoresTabla(list);
+}
+
+const buscarProvInput = document.getElementById('buscar-proveedor');
+if (buscarProvInput) {
+  buscarProvInput.addEventListener('input', (e) => {
+    filtrarProveedores(e.target.value.toLowerCase().trim());
+  });
 }
 
 function cargarProveedoresTabla(proveedores) {
@@ -789,18 +814,30 @@ function actualizarInfoVenta(autollenar = false) {
   infoEl.classList.remove('oculto');
 }
 
+// Renderizar opciones de productos en un select
+function renderOpcionesProductos(selectEl, lista, idSeleccionado = '') {
+  if (!selectEl) return;
+  if (!lista || lista.length === 0) {
+    selectEl.innerHTML = '<option value="">No hay productos coincidentes</option>';
+    return;
+  }
+  let html = '<option value="">Seleccione producto</option>';
+  html += lista.map(p => 
+    `<option value="${p.id_producto}" ${String(p.id_producto) === String(idSeleccionado) ? 'selected' : ''}>${p.nombre} (${p.sku})</option>`
+  ).join('');
+  selectEl.innerHTML = html;
+}
+
 // SA-008: Solo cargar productos ACTIVOS para los selectores de Entradas y Salidas
 async function cargarProductosSelects() {
   try {
     const res = await apiFetch(`${API}/productos?solo_activos=1`);
     listaProductosCache = await res.json();
-    const opciones = '<option value="">Seleccione producto</option>' +
-      listaProductosCache.map(p => `<option value="${p.id_producto}">${p.nombre} (${p.sku})</option>`).join('');
 
     const cProd = document.getElementById('c-producto');
     const vProd = document.getElementById('v-producto');
-    if (cProd) cProd.innerHTML = opciones;
-    if (vProd) vProd.innerHTML = opciones;
+    if (cProd) renderOpcionesProductos(cProd, listaProductosCache, cProd.value);
+    if (vProd) renderOpcionesProductos(vProd, listaProductosCache, vProd.value);
 
     actualizarInfoCompra();
     actualizarInfoVenta(false);
@@ -822,17 +859,82 @@ function actualizarCampoVencimiento() {
   if (!requiere) input.value = '';
 }
 
+// Buscador interactivo de productos en Entradas / Compras (c-buscar-producto)
+const cBuscarProdEl = document.getElementById('c-buscar-producto');
+if (cBuscarProdEl) {
+  cBuscarProdEl.addEventListener('input', (e) => {
+    const q = e.target.value.toLowerCase().trim();
+    const cProd = document.getElementById('c-producto');
+    if (!cProd) return;
+
+    const filtrados = listaProductosCache.filter(p => 
+      (p.nombre && p.nombre.toLowerCase().includes(q)) || 
+      (p.sku && p.sku.toLowerCase().includes(q)) ||
+      (p.marca && p.marca.toLowerCase().includes(q)) ||
+      (p.categoria && p.categoria.toLowerCase().includes(q))
+    );
+
+    renderOpcionesProductos(cProd, filtrados);
+    if (filtrados.length === 1) {
+      cProd.value = filtrados[0].id_producto;
+    }
+    actualizarInfoCompra();
+    actualizarCampoVencimiento();
+  });
+}
+
 if (cProdEl) cProdEl.addEventListener('change', () => {
   actualizarInfoCompra();
   actualizarCampoVencimiento();
+  const cBuscar = document.getElementById('c-buscar-producto');
+  if (cBuscar && cProdEl.value) {
+    const prod = listaProductosCache.find(p => String(p.id_producto) === String(cProdEl.value));
+    if (prod && !cBuscar.value.trim()) {
+      cBuscar.value = prod.nombre;
+    }
+  }
 });
 const cCostoEl = document.getElementById('c-costo');
 if (cCostoEl) cCostoEl.addEventListener('input', actualizarInfoCompra);
 const cCantidadEl = document.getElementById('c-cantidad');
 if (cCantidadEl) cCantidadEl.addEventListener('input', actualizarInfoCompra);
 
+// Buscador interactivo de productos en Salidas / Ventas (v-buscar-producto)
+const vBuscarProdEl = document.getElementById('v-buscar-producto');
+if (vBuscarProdEl) {
+  vBuscarProdEl.addEventListener('input', (e) => {
+    const q = e.target.value.toLowerCase().trim();
+    const vProd = document.getElementById('v-producto');
+    if (!vProd) return;
+
+    const filtrados = listaProductosCache.filter(p => 
+      (p.nombre && p.nombre.toLowerCase().includes(q)) || 
+      (p.sku && p.sku.toLowerCase().includes(q)) ||
+      (p.marca && p.marca.toLowerCase().includes(q)) ||
+      (p.categoria && p.categoria.toLowerCase().includes(q))
+    );
+
+    renderOpcionesProductos(vProd, filtrados);
+    if (filtrados.length === 1) {
+      vProd.value = filtrados[0].id_producto;
+      actualizarInfoVenta(true);
+    } else {
+      actualizarInfoVenta(false);
+    }
+  });
+}
+
 const vProdEl = document.getElementById('v-producto');
-if (vProdEl) vProdEl.addEventListener('change', () => actualizarInfoVenta(true));
+if (vProdEl) vProdEl.addEventListener('change', () => {
+  actualizarInfoVenta(true);
+  const vBuscar = document.getElementById('v-buscar-producto');
+  if (vBuscar && vProdEl.value) {
+    const prod = listaProductosCache.find(p => String(p.id_producto) === String(vProdEl.value));
+    if (prod && !vBuscar.value.trim()) {
+      vBuscar.value = prod.nombre;
+    }
+  }
+});
 const vPrecioEl = document.getElementById('v-precio');
 if (vPrecioEl) vPrecioEl.addEventListener('input', () => actualizarInfoVenta(false));
 const vCantidadEl = document.getElementById('v-cantidad');
@@ -985,23 +1087,46 @@ document.getElementById('form-producto').addEventListener('submit', async (e) =>
 // ==========================================
 // ENTRADAS / COMPRAS (EN-008, EN-009, EN-010)
 // ==========================================
+let listaComprasCache = [];
+
 async function cargarCompras() {
   try {
     const res = await apiFetch(`${API}/compras`);
     const data = await res.json();
-    const tbody = document.querySelector('#tabla-compras tbody');
-    if (!tbody) return;
-
-    tbody.innerHTML = data.map(c => `
-      <tr>
-        <td>${c.producto} (${c.sku})</td><td>${c.proveedor}</td><td>${c.cantidad}</td>
-        <td>${c.cantidad_disponible}</td><td>$${Number(c.costo_unitario).toFixed(2)}</td>
-        <td>${c.fecha_vencimiento ? new Date(c.fecha_vencimiento).toLocaleDateString() : 'No aplica'}</td>
-        <td>${new Date(c.fecha_compra).toLocaleDateString()}</td>
-      </tr>`).join('') || '<tr><td colspan="7">Sin registros</td></tr>';
+    listaComprasCache = Array.isArray(data) ? data : [];
+    const inputBuscar = document.getElementById('buscar-compra');
+    const q = inputBuscar ? inputBuscar.value.toLowerCase().trim() : '';
+    filtrarCompras(q);
   } catch (err) {
     console.error(err);
   }
+}
+
+function filtrarCompras(q = '') {
+  const tbody = document.querySelector('#tabla-compras tbody');
+  if (!tbody) return;
+  let list = listaComprasCache;
+  if (q) {
+    list = list.filter(c => 
+      (c.producto && c.producto.toLowerCase().includes(q)) ||
+      (c.sku && c.sku.toLowerCase().includes(q)) ||
+      (c.proveedor && c.proveedor.toLowerCase().includes(q))
+    );
+  }
+  tbody.innerHTML = list.map(c => `
+    <tr>
+      <td>${c.producto} (${c.sku})</td><td>${c.proveedor}</td><td>${c.cantidad}</td>
+      <td>${c.cantidad_disponible}</td><td>$${Number(c.costo_unitario).toFixed(2)}</td>
+      <td>${c.fecha_vencimiento ? new Date(c.fecha_vencimiento).toLocaleDateString() : 'No aplica'}</td>
+      <td>${new Date(c.fecha_compra).toLocaleDateString()}</td>
+    </tr>`).join('') || '<tr><td colspan="7">Sin registros</td></tr>';
+}
+
+const buscarCompraInput = document.getElementById('buscar-compra');
+if (buscarCompraInput) {
+  buscarCompraInput.addEventListener('input', (e) => {
+    filtrarCompras(e.target.value.toLowerCase().trim());
+  });
 }
 
 document.getElementById('form-compra').addEventListener('submit', async (e) => {
@@ -1032,6 +1157,8 @@ document.getElementById('form-compra').addEventListener('submit', async (e) => {
     if (res.ok) {
       mostrarMensaje('msg-compra', data.mensaje, 'exito');
       e.target.reset();
+      const cBuscar = document.getElementById('c-buscar-producto');
+      if (cBuscar) cBuscar.value = '';
       actualizarCampoVencimiento();
       document.getElementById('info-costo-compra').classList.add('oculto');
       document.getElementById('c-costo').classList.remove('campo-invalido');
@@ -1199,6 +1326,8 @@ document.getElementById('form-venta').addEventListener('submit', async (e) => {
       carritoVenta = [];
       renderCarritoVenta();
       e.target.reset();
+      const vBuscar = document.getElementById('v-buscar-producto');
+      if (vBuscar) vBuscar.value = '';
       document.getElementById('info-precio-venta').classList.add('oculto');
       document.getElementById('v-precio').classList.remove('campo-invalido');
       cargarVentas();

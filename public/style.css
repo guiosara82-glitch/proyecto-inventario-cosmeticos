@@ -79,12 +79,44 @@ th, td {
   font-size: 13.5px;
 }
 th { background: #f6e9f0; color: #7a4f6b; }
-#buscar-producto {
+#buscar-producto, #buscar-cliente, #buscar-proveedor, #buscar-compra {
   width: 100%;
   padding: 9px 12px;
   margin-top: 10px;
   border: 1px solid #ddd;
   border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.grupo-buscador-select {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 220px;
+}
+
+.grupo-buscador-select input {
+  width: 100% !important;
+  box-sizing: border-box;
+  margin: 0 !important;
+  padding: 7px 10px !important;
+  font-size: 13px !important;
+  border: 1px solid #d4c2cc !important;
+  border-radius: 6px;
+  background-color: #faf5f8;
+}
+
+.grupo-buscador-select input:focus {
+  border-color: #b85c8a !important;
+  background-color: #ffffff;
+  outline: none;
+}
+
+.grupo-buscador-select select {
+  width: 100% !important;
+  box-sizing: border-box;
+  margin: 0 !important;
 }
 tr.vencido td { background: #fdecea; }
 tr.urgente td { background: #fff8e1; }
@@ -189,7 +221,7 @@ body.oscuro .tab-btn { color: #c9a9bb; }
 body.oscuro .tab-btn.active { color: #e08bb4; border-bottom-color: #e08bb4; }
 body.oscuro h2 { color: #e08bb4; }
 body.oscuro .formulario, body.oscuro table { background: #221f26; box-shadow: none; }
-body.oscuro .formulario input, body.oscuro .formulario select, body.oscuro #buscar-producto {
+body.oscuro .formulario input, body.oscuro .formulario select, body.oscuro #buscar-producto, body.oscuro #buscar-cliente, body.oscuro #buscar-proveedor, body.oscuro #buscar-compra, body.oscuro .grupo-buscador-select input {
   background: #2b2831; border: 1px solid #3a3742; color: #e6e6e6;
 }
 body.oscuro th { background: #2f2733; color: #e08bb4; }
