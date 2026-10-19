@@ -746,7 +746,12 @@ router.get('/ganancias', async (req, res) => {
           WHEN SUM(dv.cantidad * dv.precio_unitario) > 0 THEN 
             ROUND((SUM(dv.cantidad * (dv.precio_unitario - COALESCE(dc.costo_unitario, (SELECT costo_unitario FROM detalle_compra WHERE id_producto = dv.id_producto ORDER BY id_detalle_compra ASC LIMIT 1), 0))) / SUM(dv.cantidad * dv.precio_unitario)) * 100, 2)
           ELSE 0 
-        END AS margen_porcentaje
+        END AS margen_porcentaje,
+        CASE 
+          WHEN SUM(dv.cantidad * COALESCE(dc.costo_unitario, (SELECT costo_unitario FROM detalle_compra WHERE id_producto = dv.id_producto ORDER BY id_detalle_compra ASC LIMIT 1), 0)) > 0 THEN 
+            ROUND((SUM(dv.cantidad * (dv.precio_unitario - COALESCE(dc.costo_unitario, (SELECT costo_unitario FROM detalle_compra WHERE id_producto = dv.id_producto ORDER BY id_detalle_compra ASC LIMIT 1), 0))) / SUM(dv.cantidad * COALESCE(dc.costo_unitario, (SELECT costo_unitario FROM detalle_compra WHERE id_producto = dv.id_producto ORDER BY id_detalle_compra ASC LIMIT 1), 0))) * 100, 2)
+          ELSE 0 
+        END AS roi_porcentaje
       FROM detalle_venta dv
       JOIN ventas v ON dv.id_venta = v.id_venta
       JOIN productos p ON dv.id_producto = p.id_producto
@@ -780,7 +785,12 @@ router.get('/ganancias', async (req, res) => {
           WHEN (dv.cantidad * dv.precio_unitario) > 0 THEN 
             ROUND(((dv.cantidad * (dv.precio_unitario - COALESCE(dc.costo_unitario, (SELECT costo_unitario FROM detalle_compra WHERE id_producto = dv.id_producto ORDER BY id_detalle_compra ASC LIMIT 1), 0))) / (dv.cantidad * dv.precio_unitario)) * 100, 2)
           ELSE 0 
-        END AS margen_porcentaje
+        END AS margen_porcentaje,
+        CASE 
+          WHEN (dv.cantidad * COALESCE(dc.costo_unitario, (SELECT costo_unitario FROM detalle_compra WHERE id_producto = dv.id_producto ORDER BY id_detalle_compra ASC LIMIT 1), 0)) > 0 THEN 
+            ROUND(((dv.cantidad * (dv.precio_unitario - COALESCE(dc.costo_unitario, (SELECT costo_unitario FROM detalle_compra WHERE id_producto = dv.id_producto ORDER BY id_detalle_compra ASC LIMIT 1), 0))) / (dv.cantidad * COALESCE(dc.costo_unitario, (SELECT costo_unitario FROM detalle_compra WHERE id_producto = dv.id_producto ORDER BY id_detalle_compra ASC LIMIT 1), 0))) * 100, 2)
+          ELSE 0 
+        END AS roi_porcentaje
       FROM detalle_venta dv
       JOIN ventas v ON dv.id_venta = v.id_venta
       JOIN productos p ON dv.id_producto = p.id_producto
@@ -798,6 +808,7 @@ router.get('/ganancias', async (req, res) => {
     const totalGanancia = totalIngresos - totalCostos;
     const totalUnidades = productos.reduce((acc, p) => acc + Number(p.unidades_vendidas), 0);
     const margenGlobal = totalIngresos > 0 ? Number(((totalGanancia / totalIngresos) * 100).toFixed(2)) : 0;
+    const roiGlobal = totalCostos > 0 ? Number(((totalGanancia / totalCostos) * 100).toFixed(2)) : 0;
 
     let rangoTexto = 'Histórico completo';
     if (desde && hasta) rangoTexto = `Del ${desde} al ${hasta}`;
@@ -815,24 +826,29 @@ router.get('/ganancias', async (req, res) => {
           res,
           `ganancias_${prodNom.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`,
           `Reporte Detallado de Ganancias: ${prodNom}`,
-          `Período: ${rangoTexto} | Margen del producto: ${margenGlobal}%`,
+          `Período: ${rangoTexto} | Margen Bruto: ${margenGlobal}% | ROI: ${roiGlobal}%`,
           [
             { titulo: 'Venta #', clave: 'id_venta', align: 'center' },
             { titulo: 'Fecha', clave: 'fecha_venta', align: 'left' },
             { titulo: 'Cliente', clave: 'cliente', align: 'left' },
+            { titulo: 'Lote', clave: 'id_lote', align: 'center' },
             { titulo: 'Cant.', clave: 'cantidad', align: 'center' },
             { titulo: 'P. Venta', clave: 'precio_unitario', esMoneda: true, align: 'right' },
             { titulo: 'Costo FIFO', clave: 'costo_unitario', esMoneda: true, align: 'right' },
-            { titulo: 'Venta Total', clave: 'subtotal_ingreso', esMoneda: true, align: 'right' },
-            { titulo: 'Ganancia', clave: 'ganancia', esMoneda: true, align: 'right' },
-            { titulo: 'Margen %', clave: 'margen_porcentaje', align: 'center' }
+            { titulo: 'Ingreso Venta', clave: 'subtotal_ingreso', esMoneda: true, align: 'right' },
+            { titulo: 'Costo Venta FIFO', clave: 'subtotal_costo', esMoneda: true, align: 'right' },
+            { titulo: 'Ganancia Bruta', clave: 'ganancia', esMoneda: true, align: 'right' },
+            { titulo: 'Margen %', clave: 'margen_porcentaje', align: 'center' },
+            { titulo: 'ROI %', clave: 'roi_porcentaje', align: 'center' }
           ],
           ventasDetalladas,
           {
             'Unidades Vendidas': totalUnidades,
             'Total Ventas (COP)': '$' + totalIngresos.toLocaleString('es-CO', { minimumFractionDigits: 2 }),
-            'Total Costos (COP)': '$' + totalCostos.toLocaleString('es-CO', { minimumFractionDigits: 2 }),
-            'Ganancia Neta (COP)': '$' + totalGanancia.toLocaleString('es-CO', { minimumFractionDigits: 2 })
+            'Costo de Ventas FIFO (COP)': '$' + totalCostos.toLocaleString('es-CO', { minimumFractionDigits: 2 }),
+            'Ganancia Bruta Total (COP)': '$' + totalGanancia.toLocaleString('es-CO', { minimumFractionDigits: 2 }),
+            'Margen Bruto sobre Ventas': margenGlobal + '%',
+            'ROI sobre Costo de Ventas': roiGlobal + '%'
           }
         );
       }
@@ -841,23 +857,26 @@ router.get('/ganancias', async (req, res) => {
         res,
         `reporte_ganancias_${new Date().toISOString().slice(0, 10)}.pdf`,
         'Reporte de Rentabilidad y Ganancias por Producto (PEPS/FIFO)',
-        `Período: ${rangoTexto} | Comparativa de Ingresos vs Costo de Mercancía`,
+        `Período: ${rangoTexto} | Comparativa de Ingresos vs Costo de Ventas`,
         [
           { titulo: 'SKU', clave: 'sku', align: 'left' },
           { titulo: 'Producto', clave: 'producto', align: 'left' },
           { titulo: 'Categoría', clave: 'categoria', align: 'left' },
           { titulo: 'Cant. Vendida', clave: 'unidades_vendidas', align: 'center' },
           { titulo: 'Ingresos COP', clave: 'total_ingresos', esMoneda: true, align: 'right' },
-          { titulo: 'Costos COP', clave: 'total_costos', esMoneda: true, align: 'right' },
-          { titulo: 'Ganancia COP', clave: 'ganancia_total', esMoneda: true, align: 'right' },
-          { titulo: 'Margen %', clave: 'margen_porcentaje', align: 'center' }
+          { titulo: 'Costo Ventas (FIFO)', clave: 'total_costos', esMoneda: true, align: 'right' },
+          { titulo: 'Ganancia Bruta COP', clave: 'ganancia_total', esMoneda: true, align: 'right' },
+          { titulo: 'Margen Bruto %', clave: 'margen_porcentaje', align: 'center' },
+          { titulo: 'ROI %', clave: 'roi_porcentaje', align: 'center' }
         ],
         productos,
         {
           'Total Unidades Vendidas': totalUnidades,
           'Ingresos Totales (COP)': '$' + totalIngresos.toLocaleString('es-CO', { minimumFractionDigits: 2 }),
-          'Costos Totales (COP)': '$' + totalCostos.toLocaleString('es-CO', { minimumFractionDigits: 2 }),
-          'Utilidad Bruta Total (COP)': '$' + totalGanancia.toLocaleString('es-CO', { minimumFractionDigits: 2 })
+          'Costo de Ventas FIFO (COP)': '$' + totalCostos.toLocaleString('es-CO', { minimumFractionDigits: 2 }),
+          'Ganancia Bruta Total (COP)': '$' + totalGanancia.toLocaleString('es-CO', { minimumFractionDigits: 2 }),
+          'Margen Bruto sobre Ventas': margenGlobal + '%',
+          'Retorno s/ Inversión (ROI)': roiGlobal + '%'
         }
       );
     }
@@ -868,6 +887,7 @@ router.get('/ganancias', async (req, res) => {
         total_costos: totalCostos,
         total_ganancia: totalGanancia,
         margen_global: margenGlobal,
+        roi_global: roiGlobal,
         total_unidades: totalUnidades,
         periodo: rangoTexto
       },

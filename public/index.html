@@ -489,8 +489,20 @@
         <button type="button" id="btn-print-ganancias" class="secundario">🖨️ Imprimir</button>
       </div>
 
-      <!-- Tarjetas de resumen del periodo consultado -->
-      <div class="kpi-grid" style="margin: 1rem 0; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+      <!-- Banner Educativo con Fórmulas para el Docente -->
+      <div style="background: #fdf2f8; border: 1px solid #fbcfe8; border-radius: 8px; padding: 0.85rem 1.25rem; margin: 1rem 0; font-size: 0.9rem; color: #4a044e;">
+        <div style="font-weight: 600; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.4rem;">
+          <span>📐</span> Fórmulas Financieras Aplicadas (Método FIFO / PEPS):
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 1.25rem; font-size: 0.85rem; color: #374151;">
+          <div><strong>1. Ganancia Bruta:</strong> <span style="font-family: monospace; background: #fff; padding: 2px 6px; border-radius: 4px; border: 1px solid #e5e7eb;">Ingresos Totales − Costo de Ventas (FIFO)</span></div>
+          <div><strong>2. Margen Bruto (% s/Ventas):</strong> <span style="font-family: monospace; background: #fff; padding: 2px 6px; border-radius: 4px; border: 1px solid #e5e7eb;">(Ganancia Bruta / Ingresos Totales) × 100</span></div>
+          <div><strong>3. ROI Inventario (% s/Costo FIFO):</strong> <span style="font-family: monospace; background: #fff; padding: 2px 6px; border-radius: 4px; border: 1px solid #e5e7eb;">(Ganancia Bruta / Costo de Ventas FIFO) × 100</span></div>
+        </div>
+      </div>
+
+      <!-- Tarjetas de resumen del periodo consultado (5 KPIs) -->
+      <div class="kpi-grid" style="margin: 1rem 0; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));">
         <div class="kpi-card">
           <div class="kpi-info">
             <span class="kpi-titulo">Ingresos Totales (Ventas)</span>
@@ -499,21 +511,29 @@
         </div>
         <div class="kpi-card">
           <div class="kpi-info">
-            <span class="kpi-titulo">Costo Total Mercancía (FIFO)</span>
+            <span class="kpi-titulo">Costo de Ventas (FIFO)</span>
             <span class="kpi-valor" id="gan-tot-costos">$0.00</span>
           </div>
         </div>
         <div class="kpi-card" style="border-left: 4px solid #28a745;">
           <div class="kpi-info">
-            <span class="kpi-titulo">Ganancia Neta Obtenida</span>
+            <span class="kpi-titulo">Ganancia Bruta</span>
             <span class="kpi-valor" id="gan-tot-utilidad" style="color:#28a745;">$0.00</span>
-            <span class="kpi-sub" id="gan-tot-utilidad-sub">Utilidad total del periodo</span>
+            <span class="kpi-sub" id="gan-tot-utilidad-sub">Ingresos − Costo FIFO</span>
           </div>
         </div>
         <div class="kpi-card">
           <div class="kpi-info">
-            <span class="kpi-titulo">Margen de Rentabilidad</span>
+            <span class="kpi-titulo">Margen Bruto (% s/Ventas)</span>
             <span class="kpi-valor" id="gan-tot-margen">0%</span>
+            <span class="kpi-sub">Utilidad sobre ingresos</span>
+          </div>
+        </div>
+        <div class="kpi-card" style="border-left: 4px solid #7a4f6b;">
+          <div class="kpi-info">
+            <span class="kpi-titulo">ROI Inventario (% s/Costo)</span>
+            <span class="kpi-valor" id="gan-tot-roi" style="color:#7a4f6b;">0%</span>
+            <span class="kpi-sub">Retorno sobre costo FIFO</span>
           </div>
         </div>
       </div>
@@ -528,7 +548,7 @@
             <thead>
               <tr>
                 <th>SKU</th><th>Producto</th><th>Categoría</th><th>Cant. Vendida</th>
-                <th>Total Ventas COP</th><th>Costo Mercancía COP</th><th>Ganancia Neta COP</th><th>Margen %</th><th>Acción</th>
+                <th>Ingresos Totales COP</th><th>Costo Ventas FIFO COP</th><th>Ganancia Bruta COP</th><th>Margen Bruto %</th><th>ROI Inventario %</th><th>Acción</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -546,7 +566,7 @@
             <thead>
               <tr>
                 <th>Venta #</th><th>Fecha y Hora</th><th>Cliente</th><th>Lote FIFO</th><th>Cant.</th>
-                <th>P. Venta Unit.</th><th>Costo Unit. FIFO</th><th>Subtotal Venta</th><th>Ganancia Venta</th><th>Margen %</th>
+                <th>P. Venta Unit.</th><th>Costo Unit. FIFO</th><th>Ingreso Venta</th><th>Costo Venta FIFO</th><th>Ganancia Bruta</th><th>Margen %</th><th>ROI %</th>
               </tr>
             </thead>
             <tbody></tbody>
