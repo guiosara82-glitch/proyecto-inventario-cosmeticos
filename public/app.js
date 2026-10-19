@@ -2164,9 +2164,6 @@ async function consultarReporteGanancias(idProdForzado = null) {
         tbodyProd.innerHTML = data.productos.map(p => {
           const margen = Number(p.margen_porcentaje);
           const badgeClase = margen >= 40 ? 'badge-activo' : (margen >= 20 ? 'badge-admin' : 'badge-inactivo');
-          const gananciaUnit = (Number(p.unidades_vendidas) > 0)
-            ? (Number(p.ganancia_total) / Number(p.unidades_vendidas))
-            : 0;
           return `
             <tr>
               <td><strong>${p.sku}</strong></td>
@@ -2175,12 +2172,7 @@ async function consultarReporteGanancias(idProdForzado = null) {
               <td style="text-align:center;">${p.unidades_vendidas}</td>
               <td style="text-align:right;">$${Number(p.total_ingresos).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
               <td style="text-align:right;">$${Number(p.total_costos).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
-              <td style="text-align:right; font-weight:bold; color:#28a745;">
-                $${Number(p.ganancia_total).toLocaleString('es-CO', { minimumFractionDigits: 2 })}
-                <div style="font-size:11px; color:#666; font-weight:normal; margin-top:2px;" title="Multiplicación de unidades por margen unitario">
-                  (${p.unidades_vendidas} un. × $${gananciaUnit.toLocaleString('es-CO', { minimumFractionDigits: 2 })})
-                </div>
-              </td>
+              <td style="text-align:right; font-weight:bold; color:#28a745;">$${Number(p.ganancia_total).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
               <td style="text-align:center;"><span class="badge ${badgeClase}">${margen}%</span></td>
               <td style="text-align:center;">
                 <button type="button" class="btn-accion btn-editar" onclick="verDetalleVentasProducto(${p.id_producto}, '${p.producto.replace(/'/g, "\\'")}')" title="Ver ventas por fecha">📅 Ver Ventas</button>
@@ -2188,6 +2180,33 @@ async function consultarReporteGanancias(idProdForzado = null) {
             </tr>
           `;
         }).join('') || '<tr><td colspan="9">No se encontraron ventas de productos en este periodo o criterio.</td></tr>';
+
+        // Fila de TOTALES / SUMATORIA GENERAL al pie de la tabla
+        const tfootProd = document.querySelector('#tabla-rep-ganancias tfoot');
+        if (tfootProd) {
+          if (data.productos.length > 0) {
+            const totIngresos = data.productos.reduce((acc, p) => acc + Number(p.total_ingresos), 0);
+            const totCostos = data.productos.reduce((acc, p) => acc + Number(p.total_costos), 0);
+            const totGanancia = data.productos.reduce((acc, p) => acc + Number(p.ganancia_total), 0);
+            const totUnidades = data.productos.reduce((acc, p) => acc + Number(p.unidades_vendidas), 0);
+            const margenPond = totIngresos > 0 ? ((totGanancia / totIngresos) * 100).toFixed(2) : '0.00';
+            const badgeClaseTot = Number(margenPond) >= 20 ? 'badge-activo' : 'badge-admin';
+
+            tfootProd.innerHTML = `
+              <tr class="fila-totales-tabla">
+                <td colspan="3" style="text-align:right; font-weight:bold; letter-spacing:0.5px;">TOTALES (SUMATORIA):</td>
+                <td style="text-align:center; font-weight:bold;">${totUnidades}</td>
+                <td style="text-align:right; font-weight:bold;">$${totIngresos.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+                <td style="text-align:right; font-weight:bold;">$${totCostos.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+                <td style="text-align:right; font-weight:bold; color:#28a745; font-size:1.05em;">$${totGanancia.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+                <td style="text-align:center;"><span class="badge ${badgeClaseTot}">${margenPond}%</span></td>
+                <td style="text-align:center;">-</td>
+              </tr>
+            `;
+          } else {
+            tfootProd.innerHTML = '';
+          }
+        }
       }
     }
 
@@ -2199,13 +2218,12 @@ async function consultarReporteGanancias(idProdForzado = null) {
 
 function renderDetalleVentasGanancias(ventas, nombreProd) {
   const tbodyDet = document.querySelector('#tabla-rep-ganancias-detalle tbody');
+  const tfootDet = document.querySelector('#tabla-rep-ganancias-detalle tfoot');
   const titDet = document.getElementById('titulo-detalle-ventas');
   if (titDet) titDet.textContent = `Historial de Ventas y Ganancias: ${nombreProd}`;
 
   if (!tbodyDet) return;
-  tbodyDet.innerHTML = ventas.map(v => {
-    const gananciaUnit = Number(v.precio_unitario) - Number(v.costo_unitario);
-    return `
+  tbodyDet.innerHTML = ventas.map(v => `
     <tr>
       <td><strong>#${v.id_venta}</strong></td>
       <td>${new Date(v.fecha_venta).toLocaleString('es-CO')}</td>
@@ -2215,16 +2233,34 @@ function renderDetalleVentasGanancias(ventas, nombreProd) {
       <td style="text-align:right;">$${Number(v.precio_unitario).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
       <td style="text-align:right;">$${Number(v.costo_unitario).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
       <td style="text-align:right;">$${Number(v.subtotal_ingreso).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
-      <td style="text-align:right; font-weight:bold; color:#28a745;">
-        $${Number(v.ganancia).toLocaleString('es-CO', { minimumFractionDigits: 2 })}
-        <div style="font-size:11px; color:#666; font-weight:normal; margin-top:2px;" title="Multiplicación de unidades por margen unitario de la venta">
-          (${v.cantidad} un. × $${gananciaUnit.toLocaleString('es-CO', { minimumFractionDigits: 2 })})
-        </div>
-      </td>
+      <td style="text-align:right; font-weight:bold; color:#28a745;">$${Number(v.ganancia).toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
       <td style="text-align:center;"><span class="badge ${Number(v.margen_porcentaje) >= 20 ? 'badge-activo' : 'badge-inactivo'}">${v.margen_porcentaje}%</span></td>
     </tr>
-  `;
-  }).join('') || '<tr><td colspan="10">No hay ventas registradas para este producto en el periodo seleccionado.</td></tr>';
+  `).join('') || '<tr><td colspan="10">No hay ventas registradas para este producto en el periodo seleccionado.</td></tr>';
+
+  if (tfootDet) {
+    if (ventas.length > 0) {
+      const totCant = ventas.reduce((acc, v) => acc + Number(v.cantidad), 0);
+      const totSub = ventas.reduce((acc, v) => acc + Number(v.subtotal_ingreso), 0);
+      const totGan = ventas.reduce((acc, v) => acc + Number(v.ganancia), 0);
+      const margenGlob = totSub > 0 ? ((totGan / totSub) * 100).toFixed(2) : '0.00';
+      const badgeClaseTot = Number(margenGlob) >= 20 ? 'badge-activo' : 'badge-admin';
+
+      tfootDet.innerHTML = `
+        <tr class="fila-totales-tabla">
+          <td colspan="4" style="text-align:right; font-weight:bold; letter-spacing:0.5px;">TOTALES (SUMATORIA):</td>
+          <td style="text-align:center; font-weight:bold;">${totCant}</td>
+          <td style="text-align:center;">-</td>
+          <td style="text-align:center;">-</td>
+          <td style="text-align:right; font-weight:bold;">$${totSub.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+          <td style="text-align:right; font-weight:bold; color:#28a745; font-size:1.05em;">$${totGan.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
+          <td style="text-align:center;"><span class="badge ${badgeClaseTot}">${margenGlob}%</span></td>
+        </tr>
+      `;
+    } else {
+      tfootDet.innerHTML = '';
+    }
+  }
 }
 
 window.verDetalleVentasProducto = function(idProducto, nombreProd) {

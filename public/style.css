@@ -90,6 +90,20 @@ tr.vencido td { background: #fdecea; }
 tr.urgente td { background: #fff8e1; }
 tr.critico td { background: #fdecea; }
 
+.fila-totales-tabla td {
+  background: #fdf5f8 !important;
+  border-top: 2px solid #b85c8a !important;
+  border-bottom: 2px solid #b85c8a !important;
+  font-weight: bold;
+  color: #3a2a33;
+}
+body.oscuro .fila-totales-tabla td {
+  background: #2b232c !important;
+  border-top: 2px solid #e08bb4 !important;
+  border-bottom: 2px solid #e08bb4 !important;
+  color: #f5eef4;
+}
+
 .oculto { display: none !important; }
 .pantalla-login {
   min-height: 100vh;
